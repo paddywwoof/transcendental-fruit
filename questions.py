@@ -8,7 +8,7 @@ import random
 class Question(object):
   right = 0
   wrong = 0
-  invop = {'*':'/', '+':'-'}
+  invop = {'*':'/', '+':'-'} # dict to return inverse of operation
 
   def __init__(self, val1, val2, op='*'):
     self.op = op if op == '*' else '+'

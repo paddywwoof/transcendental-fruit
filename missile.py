@@ -11,6 +11,7 @@ class Missile(pi3d.Model):
     super(Missile, self).__init__(file_string='models/missile{}.obj'.format(m_type))
     self.set_normal_shine(bumpimg, 1.0, reflimg, 0.2)
     self.set_shader(shader)
+    self.m_type = m_type
 
   def launch(self, loc, mtrx, speed, targets=None):
     self.loc = loc
@@ -37,7 +38,7 @@ class Missile(pi3d.Model):
         dx, dy, dz = t.loc[0] - self.loc[0], t.loc[1] - self.loc[1], t.loc[2] - self.loc[2]
         dist = (dx ** 2 + dy ** 2 + dz ** 2) ** 0.5
         dist_list.append(dist)
-        if dist < nearest_dist and not t.hit:
+        if dist < t.threshold and dist < nearest_dist and not t.hit:
           nearest_dist = dist
           nearest_i = i
       if nearest_i > -1 and dist_list[nearest_i] > self.last_dist[nearest_i]:
