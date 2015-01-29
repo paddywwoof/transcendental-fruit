@@ -29,7 +29,7 @@ class Main(object):
   CAMERA = pi3d.Camera()
   CAMERA2D = pi3d.Camera(is_3d=False)
   ##### shaders
-  shader = pi3d.Shader('uv_bump')
+  shader = pi3d.Shader('uv_light')
   shinesh = pi3d.Shader('uv_reflect')
   flatsh = pi3d.Shader('uv_flat')
   matsh = pi3d.Shader('mat_flat')
@@ -39,14 +39,32 @@ class Main(object):
   rockimg = pi3d.Texture('textures/rock1.jpg')
   starimg = pi3d.Texture('textures/space1.jpg', flip=True)
   explimg = pi3d.Texture('models/ast_expl.png')
+  cloudimg = pi3d.Texture("textures/earth_clouds.png", blend=True)
+  earthimg = pi3d.Texture("textures/world_map.jpg")
+  moonimg = pi3d.Texture("textures/moon.jpg")
   ansimg = {}
   fnames = glob.glob('textures/???.jpg')
   for f in fnames:
     ansimg[int(f[9:12])] = pi3d.Texture(f, flip=True)
   ##### environment sphere
-  sphere = pi3d.Sphere(radius=4000.0, rx=180, invert=True)
+  sphere = pi3d.Sphere(radius=4000.0, rz=90, invert=True)
   sphere.set_draw_details(flatsh, [starimg])
-  sphere.set_fog((0.0, 0.0, 0.0, 1.0),12000)
+  sphere.set_fog((0.0, 0.0, 0.0, 1.0), 12000)
+  ##### earth
+  earth = pi3d.Sphere(radius=1000.0, slices=32, sides=32)
+  earth.set_draw_details(shader, [earthimg])
+  earth.set_fog((0.0, 0.0, 0.0, 1.0), 12000)
+  earth.positionX(2400.0)
+  ##### clouds
+  clouds = pi3d.Sphere(radius=1020.0, slices=32, sides=32)
+  clouds.set_draw_details(shader, [cloudimg])
+  clouds.set_fog((0.0, 0.0, 0.0, 1.0), 12000)
+  clouds.positionX(2400.0)
+  ##### moon
+  moon = pi3d.Sphere(radius=500.0, slices=24, sides=24)
+  moon.set_draw_details(shader, [moonimg])
+  moon.set_fog((0.0, 0.0, 0.0, 1.0), 12000)
+  moon.positionX(-2400.0)
   ##### load saved game state
   if os.path.isfile('game.ini'):
     with open('game.ini', 'r') as fp:
@@ -74,8 +92,9 @@ class Main(object):
   ##### meters
   energy = 0.7
   score = 0.1
-  score_meter = Meter(matsh, CAMERA2D, -DISPLAY.width/2.0+60, 60.0, DISPLAY.height, value=score)
-  energy_meter = Meter(matsh, CAMERA2D, DISPLAY.width/2.0-60, 60.0, DISPLAY.height, value=energy)
+  w, h = DISPLAY.width, DISPLAY.height
+  score_meter = Meter(matsh, CAMERA2D, -w/2.1, w*0.05, DISPLAY.height, value=score)
+  energy_meter = Meter(matsh, CAMERA2D, w/2.1, w*0.05, DISPLAY.height, value=energy)
   ##### strings
   font = pi3d.Pngfont('fonts/Arial2.png', (200, 30, 10, 255))
   font.blend = True
@@ -209,6 +228,9 @@ class Main(object):
     for a in self.asteroids:
       a.draw()
       a.move()
+    self.earth.draw()
+    self.moon.draw()
+    self.clouds.draw()
     self.score_meter.draw()
     self.energy_meter.draw()
     if self.mode == RECHARGE:
