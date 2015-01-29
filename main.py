@@ -192,7 +192,7 @@ class Main(object):
       self.q_text.set_shader(self.flatsh)
       ans_list = [ans] #add correct answer first
       while len(ans_list) < 5:
-        poss_ans = random.choice(self.ansimg.keys())
+        poss_ans = random.choice(list(self.ansimg.keys()))
         if not (poss_ans in ans_list):
           ans_list.append(poss_ans)
       self.asteroids = []
