@@ -21,10 +21,9 @@ SHOOT_LEVEL = 0.9
 MAX_DIST = 300
 
 ########################################################################
-########################################################################
 class Main(object):
   # Setup display and initialise pi3d
-  DISPLAY = pi3d.Display.create(x=50, y=50, far=10000)
+  DISPLAY = pi3d.Display.create(x=50, y=50, far=10000, frames_per_second=30.0)
   ##### cameras
   CAMERA = pi3d.Camera()
   CAMERA2D = pi3d.Camera(is_3d=False)
@@ -51,12 +50,12 @@ class Main(object):
   sphere.set_draw_details(flatsh, [starimg])
   sphere.set_fog((0.0, 0.0, 0.0, 1.0), 12000)
   ##### earth
-  earth = pi3d.Sphere(radius=1000.0, slices=32, sides=32)
+  earth = pi3d.Sphere(radius=1000.0, slices=16, sides=32)
   earth.set_draw_details(shader, [earthimg])
   earth.set_fog((0.0, 0.0, 0.0, 1.0), 12000)
   earth.positionX(2400.0)
   ##### clouds
-  clouds = pi3d.Sphere(radius=1020.0, slices=32, sides=32)
+  clouds = pi3d.Sphere(radius=1020.0, slices=16, sides=32)
   clouds.set_draw_details(shader, [cloudimg])
   clouds.set_fog((0.0, 0.0, 0.0, 1.0), 12000)
   clouds.positionX(2400.0)
@@ -65,36 +64,25 @@ class Main(object):
   moon.set_draw_details(shader, [moonimg])
   moon.set_fog((0.0, 0.0, 0.0, 1.0), 12000)
   moon.positionX(-2400.0)
-  ##### load saved game state
-  if os.path.isfile('game.ini'):
-    with open('game.ini', 'r') as fp:
-      saved_status = pickle.read(fp)
-      score = saved_status['score']
-      energy = saved_status['energy']
-      questions = saved_status['questions']
-      q_pointer = saved_status['q_pointer']
-  else:
-    score = 0.0
-    energy = 1.0
-    questions = questions #from imported questions
-    q_pointer = 1 #number to slice with not really pointer
-  mode = SHOOT
-  q_number = 0 #set when question asked
   ##### levels
   levels = levels
   ##### asteroids
   asteroid_stock = [] #stock of available asteroids to use
   asteroids = [] #list of 'active' asteroids
-  for i in range(10):
-    asteroid_stock.append(Asteroid(bumpimg, reflimg, explimg))
+  asteroid_stock.append(Asteroid(bumpimg, reflimg, explimg)) #zeroth is prototype to clone
+  for i in range(9):
+    asteroid_stock.append(Asteroid(bumpimg, reflimg, explimg, clone=asteroid_stock[0]))
   ##### missile
-  missile = Missile(0, bumpimg, reflimg, shinesh)
+  missiles = []
+  for i in range(1):
+    missiles.append([]) # i.e. list of lists
+    missiles[i].append(Missile(i, bumpimg, reflimg, shinesh)) #zeroth is prototype
+    for j in range(4):
+      missiles[i].append(Missile(i, bumpimg, reflimg, shinesh, clone=missiles[i][0]))
   ##### meters
-  energy = 0.7
-  score = 0.1
   w, h = DISPLAY.width, DISPLAY.height
-  score_meter = Meter(matsh, CAMERA2D, -w/2.1, w*0.05, DISPLAY.height, value=score)
-  energy_meter = Meter(matsh, CAMERA2D, w/2.1, w*0.05, DISPLAY.height, value=energy)
+  score_meter = Meter(matsh, CAMERA2D, -w/2.3, w*0.05, DISPLAY.height, value=0.0)
+  energy_meter = Meter(matsh, CAMERA2D, w/2.3, w*0.05, DISPLAY.height, value=0.0)
   ##### strings
   font = pi3d.Pngfont('fonts/Arial2.png', (200, 30, 10, 255))
   font.blend = True
@@ -109,7 +97,6 @@ class Main(object):
   z = 0.0
   y = 0.0
 
-  missile_flag = False
   go_speed = 0.2
 
   mode = SHOOT # 0 is shooting mode, 1 is recharge mode
@@ -157,28 +144,34 @@ class Main(object):
     ''' put asteroids in start positions with correct textures etc.
     pass asteroid list to missile.
     '''
+    with open('game.ini', 'w') as fp: #save status
+      saved_status = {'score': self.score, 'energy':self.energy,
+                        'questions':self.questions, 'q_pointer':self.q_pointer}
+      pickle.dump(saved_status, fp)
     self.frame_count = 0
     if self.mode == SHOOT:
       level = self.get_level()
+      (self.x, self.y, self.z) = (level.start_location)
       self.asteroids = []
       for i in range(level.num):
         a = self.asteroid_stock[i]
         a.launch(self.shinesh, self.rockimg, level.start_loc, level.start_range,
                 (self.x, self.y, self.z), level.speed, level.speed_range)
         self.asteroids.append(a)
-      if self.missile.m_type != level.missile:
-        self.missile = Missile(level.missile, self.bumpimg, self.reflimg, self.shinesh)
       self.go_speed = level.go_speed
       self.q_text = self.default_string
+      self.missile_pointer = 0
+      self.num_missiles = level.num_missiles
+      self.missile = level.missile
     else: # ask recharge questions
       self.q_number = -1
       all_good = True
       for i, q in enumerate(self.questions[:self.q_pointer]): #restricted list
         ratio = q.right / (q.right + q.wrong + 0.5)
-        if ratio < 0.80:
+        if ratio < 0.75:
           self.q_number = i
           break
-        elif ratio < 0.90:
+        elif ratio < 0.85:
           all_good = False
       if all_good: #add a new question for next time
         self.q_pointer += 1
@@ -210,9 +203,26 @@ class Main(object):
   def __init__(self):
     ''' need an instance to do initial settings with reset
     '''
+    ##### load saved game state
+    if os.path.isfile('game.ini'):
+      with open('game.ini', 'r') as fp:
+        saved_status = pickle.load(fp)
+        self.score = saved_status['score']
+        self.energy = saved_status['energy']
+        self.questions = saved_status['questions']
+        self.q_pointer = saved_status['q_pointer']
+    else:
+      self.score = 0.0
+      self.energy = 1.0
+      self.questions = questions #from imported questions
+      self.q_pointer = 1 #number to slice with not really pointer
+    self.mode = SHOOT
+    self.q_number = 0 #set when question asked
     self.reset()
-    
+
+#----############################-----#############################----#
 #####----------------------------#####-----------------------------#####
+#----############################-----#############################----#
   def pi3dloop(self, dt):
     self.DISPLAY.loop_running()
     self.CAMERA.reset()
@@ -247,8 +257,6 @@ class Main(object):
       elif self.DISPLAY.android.screen.tapped:
         fire = True
         self.DISPLAY.android.screen.tapped = False
-      #elif self.DISPLAY.android.screen.double_tapped:
-      #  fire = True
       #  self.DISPLAY.android.screen.double_tapped = False
     else: # other platforms >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
       mx, my = self.mouse.position()
@@ -268,36 +276,38 @@ class Main(object):
 
     ##### act on results of input ######################################
     if fire:
-      self.missile.launch([self.x, self.y, self.z], self.CAMERA.mtrx,
-                          0.5, self.asteroids)
+      self.missiles[self.missile][self.missile_pointer].launch([self.x, self.y, self.z],
+                                  self.CAMERA.mtrx, 0.5, self.asteroids)
       self.energy -= 0.05
       self.energy_meter.change_reading(self.energy)
-      self.missile_flag = True
+      self.missiles[self.missile][self.missile_pointer].flag = True
+      self.missile_pointer = (self.missile_pointer + 1) % self.num_missiles
 
     self.x += self.CAMERA.mtrx[0, 3] * self.go_speed
     self.y += self.CAMERA.mtrx[1, 3] * self.go_speed
     self.z += self.CAMERA.mtrx[2, 3] * self.go_speed
-    if self.missile_flag:
-      self.missile.draw()
-      self.missile.move()
-      i, dist = self.missile.test_hits()
-      if i > -1:
-        self.missile_flag = False
-        if self.asteroids[i].test_hit(dist):
-          if self.mode == SHOOT:
-            self.score += 0.025
-            if self.score > 1.0:
-              self.score = 1.0
-            self.score_meter.change_reading(self.score)
-          else: # questioning
-            if self.asteroids[i].correct_answer:
-              self.energy += 0.3
-              if self.energy > 1.0:
-                self.energy = 1.0
-              self.energy_meter.change_reading(self.energy)
-              self.questions[self.q_number].right += 1
-            else:
-              self.questions[self.q_number].wrong += 1
+    for m in self.missiles[self.missile][0:self.num_missiles]:
+      if m.flag:
+        m.draw()
+        m.move()
+        i, dist = m.test_hits()
+        if i > -1:
+          m.flag = False
+          if self.asteroids[i].test_hit(dist):
+            if self.mode == SHOOT:
+              self.score += 0.025
+              if self.score > 1.0:
+                self.score = 1.0
+              self.score_meter.change_reading(self.score)
+            else: # questioning
+              if self.asteroids[i].correct_answer:
+                self.energy += 0.3
+                if self.energy > 1.0:
+                  self.energy = 1.0
+                self.energy_meter.change_reading(self.energy)
+                self.questions[self.q_number].right += 1
+              else:
+                self.questions[self.q_number].wrong += 1
 
     return True
 

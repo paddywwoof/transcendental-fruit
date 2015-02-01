@@ -7,8 +7,15 @@ import pi3d
 
 ########################################################################
 class Asteroid(pi3d.Model):
-  def __init__(self, bumpimg, reflimg, explimg, threshold=10.0):
-    super(Asteroid, self).__init__(file_string='models/asteroid.obj')
+  def __init__(self, bumpimg, reflimg, explimg, threshold=10.0, clone=None):
+    if clone == None:
+      super(Asteroid, self).__init__(file_string='models/asteroid.obj')
+    else:
+      super(Asteroid, self).__init__(file_string='__clone__')
+      self.buf = clone.buf
+      self.vGroup = clone.vGroup
+      self.shader = clone.shader
+      self.textures = clone.textures
     self.bumpimg = bumpimg
     self.reflimg = reflimg
     self.explimg = explimg
@@ -20,7 +27,8 @@ class Asteroid(pi3d.Model):
   def launch(self, shader, texture, box_location, box_size, target, speed,
               speed_range, threshold=None, correct_answer=False):
     self.shader = shader
-    self.set_draw_details(shader, [texture, self.bumpimg, self.reflimg], 1.0, 0.2)
+    self.texture = texture
+    self.set_draw_details(shader, [self.texture, self.bumpimg, self.reflimg], 1.0, 0.2)
     # make start relative to self
     self.loc = [box_location[i] + target[i] + (random.random() - 0.5) * box_size[i] for i in range(3)]
     self.position(*self.loc)
@@ -48,7 +56,6 @@ class Asteroid(pi3d.Model):
 
   def test_hit(self, dist):
     if dist < self.threshold:
-      self.set_draw_details(self.shader, [self.explimg, self.bumpimg, self.reflimg], 1.0, 0.5)
       self.explode_seq = 0
       self.hit = True
       return True
@@ -62,4 +69,8 @@ class Asteroid(pi3d.Model):
       self.scale(sc_fact, sc_fact, sc_fact)
       self.set_alpha((200.0 - self.explode_seq) / 200.0)
       self.explode_seq += 1
-    super(Asteroid, self).draw()
+      super(Asteroid, self).draw(self.shader, [self.explimg, self.bumpimg,
+                                  self.reflimg], 1.0, 0.5) #expliding
+    else:
+      super(Asteroid, self).draw(self.shader, [self.texture, self.bumpimg,
+                                  self.reflimg], 1.0, 0.5) #not exploding

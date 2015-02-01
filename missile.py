@@ -5,13 +5,24 @@ import demo
 import random
 import pi3d
 
+L_R = (0.0, 0.0, 0.001, 0.0, -0.001)
+U_D = (0.0, 0.0, 0.0, 0.001, -0.0001)
+
 ########################################################################
 class Missile(pi3d.Model):
-  def __init__(self, m_type, bumpimg, reflimg, shader):
-    super(Missile, self).__init__(file_string='models/missile{}.obj'.format(m_type))
+  def __init__(self, m_type, bumpimg, reflimg, shader, clone=None):
+    if clone == None:
+      super(Missile, self).__init__(file_string='models/missile{}.obj'.format(m_type))
+    else:
+      super(Missile, self).__init__(file_string='__clone__')
+      self.buf = clone.buf
+      self.vGroup = clone.vGroup
     self.set_normal_shine(bumpimg, 1.0, reflimg, 0.2)
     self.set_shader(shader)
     self.m_type = m_type
+    self.flag = False
+    self.l_r = L_R[m_type] # left/right curve factor
+    self.u_d = U_D[m_type] # up/down curve factor
 
   def launch(self, loc, mtrx, speed, targets=None):
     self.loc = loc
@@ -28,6 +39,9 @@ class Missile(pi3d.Model):
     self.loc[2] += self.dz
     self.position(*self.loc)
     self.rotateIncZ(3.3)
+    self.dx -= self.dz * self.l_r
+    self.dy += self.dz * self.u_d
+    self.dz += self.dx * self.l_r - self.dy * self.u_d
 
   def test_hits(self):
     if self.targets:

@@ -13,7 +13,7 @@ class Meter(pi3d.Sprite):
     self.material = material
     self.change_reading(value)
     self.set_shader(shader)
-    self.set_alpha(0.15)
+    self.set_alpha(0.25)
 
   def change_reading(self, value):
     mix = [self.material[0][i] * (1.0 - value) + self.material[1][i] * value for i in range(3)]
