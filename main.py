@@ -144,7 +144,7 @@ class Main(object):
     ''' put asteroids in start positions with correct textures etc.
     pass asteroid list to missile.
     '''
-    with open('game.ini', 'w') as fp: #save status
+    with open('game.ini', 'wb') as fp: #save status
       saved_status = {'score': self.score, 'energy':self.energy,
                         'questions':self.questions, 'q_pointer':self.q_pointer}
       pickle.dump(saved_status, fp)
@@ -205,7 +205,7 @@ class Main(object):
     '''
     ##### load saved game state
     if os.path.isfile('game.ini'):
-      with open('game.ini', 'r') as fp:
+      with open('game.ini', 'rb') as fp:
         saved_status = pickle.load(fp)
         self.score = saved_status['score']
         self.energy = saved_status['energy']
