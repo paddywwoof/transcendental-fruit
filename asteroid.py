@@ -51,7 +51,7 @@ class Asteroid(pi3d.Model):
     self.loc[1] += self.dy
     self.loc[2] += self.dz
     self.position(*self.loc)
-    self.rotateIncY(0.51)
+    self.rotateIncY(1.51)
     self.rotateIncZ(0.21)
 
   def test_hit(self, dist):
@@ -62,15 +62,15 @@ class Asteroid(pi3d.Model):
     return False
 
   def draw(self):
-    if self.explode_seq > 200:
+    if self.explode_seq > 100:
       return
     elif self.explode_seq > -1:
-      sc_fact = 1.015 ** self.explode_seq
+      sc_fact = 1.02 ** self.explode_seq
       self.scale(sc_fact, sc_fact, sc_fact)
-      self.set_alpha((200.0 - self.explode_seq) / 200.0)
+      self.set_alpha((100.0 - self.explode_seq) / 100.0)
       self.explode_seq += 1
       super(Asteroid, self).draw(self.shader, [self.explimg, self.bumpimg,
-                                  self.reflimg], 1.0, 0.5) #expliding
+                                  self.reflimg], 1.0, 0.5) #exploding
     else:
       super(Asteroid, self).draw(self.shader, [self.texture, self.bumpimg,
                                   self.reflimg], 1.0, 0.5) #not exploding

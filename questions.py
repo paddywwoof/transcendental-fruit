@@ -8,16 +8,17 @@ import random
 class Question(object):
   right = 0
   wrong = 0
-  invop = {'*':'/', '+':'-'} # dict to return inverse of operation
+  ratio = 1.0
+  invop = {'x':'/', '+':'-'} # dict to return inverse of operation
 
-  def __init__(self, val1, val2, op='*'):
-    self.op = op if op == '*' else '+'
+  def __init__(self, val1, val2, op='x'):
+    self.op = op if op == 'x' else '+'
     self.vals = [val1, val2]
 
   def make_qanda(self):
     ''' returns a string question and integer answer
     '''
-    ans = self.vals[0] * self.vals[1] if self.op == '*' else self.vals[0] + self.vals[1]
+    ans = self.vals[0] * self.vals[1] if self.op == 'x' else self.vals[0] + self.vals[1]
     (i, j) = (0, 1) if random.random() > 0.5 else (1, 0)
     if random.random() > 0.5:
       question = '{} {} {} ='.format(self.vals[i], self.op, self.vals[j])

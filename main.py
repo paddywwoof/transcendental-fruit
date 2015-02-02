@@ -15,7 +15,7 @@ import os, pickle, glob
 
 SHOOT = 0
 RECHARGE = 1
-N_FRAMES = 7200 #120s at 60fps
+N_FRAMES = 3600 #120s at 30fps
 RECHARGE_LEVEL = 0.1
 SHOOT_LEVEL = 0.9
 MAX_DIST = 300
@@ -38,9 +38,10 @@ class Main(object):
   rockimg = pi3d.Texture('textures/rock1.jpg')
   starimg = pi3d.Texture('textures/space1.jpg', flip=True)
   explimg = pi3d.Texture('models/ast_expl.png')
-  cloudimg = pi3d.Texture("textures/earth_clouds.png", blend=True)
-  earthimg = pi3d.Texture("textures/world_map.jpg")
-  moonimg = pi3d.Texture("textures/moon.jpg")
+  cloudimg = pi3d.Texture('textures/earth_clouds.png', blend=True)
+  earthimg = pi3d.Texture('textures/world_map.jpg')
+  moonimg = pi3d.Texture('textures/moon.jpg')
+  targimg = pi3d.Texture('textures/target.png', blend=True)
   ansimg = {}
   fnames = glob.glob('textures/???.jpg')
   for f in fnames:
@@ -64,6 +65,9 @@ class Main(object):
   moon.set_draw_details(shader, [moonimg])
   moon.set_fog((0.0, 0.0, 0.0, 1.0), 12000)
   moon.positionX(-2400.0)
+  ##### target
+  target = pi3d.Sprite(w=64, h=64, camera=CAMERA2D)
+  target.set_draw_details(flatsh, [targimg])
   ##### levels
   levels = levels
   ##### asteroids
@@ -74,11 +78,11 @@ class Main(object):
     asteroid_stock.append(Asteroid(bumpimg, reflimg, explimg, clone=asteroid_stock[0]))
   ##### missile
   missiles = []
-  for i in range(1):
+  for i in range(5):
     missiles.append([]) # i.e. list of lists
     missiles[i].append(Missile(i, bumpimg, reflimg, shinesh)) #zeroth is prototype
     for j in range(4):
-      missiles[i].append(Missile(i, bumpimg, reflimg, shinesh, clone=missiles[i][0]))
+      missiles[i].append(Missile(i, bumpimg, reflimg, (shinesh if i < 3 else shader), clone=missiles[i][0]))
   ##### meters
   w, h = DISPLAY.width, DISPLAY.height
   score_meter = Meter(matsh, CAMERA2D, -w/2.3, w*0.05, DISPLAY.height, value=0.0)
@@ -93,9 +97,8 @@ class Main(object):
   ##### avatar camera
   rot = 0.0
   tilt = 0.0
-  x = 0.0
-  z = 0.0
-  y = 0.0
+  x, y, z = 0.0, 0.0, 0.0
+  dx, dy, dz = 0.0, 0.0, 0.0
 
   go_speed = 0.2
 
@@ -106,10 +109,10 @@ class Main(object):
   def get_level(self):
     ''' utility function to get level from current score
     '''
-    for l in self.levels:
-      if self.score >= l.minv and self.score <= l.maxv:
-        return l
-    return self.levels[-1] # at max level
+    #for l in self.levels:
+    #  if self.score >= l.minv and self.score <= l.maxv:
+    #    return l
+    return self.levels[min(self.q_pointer, len(self.levels)) - 1]
 
 #####----------------------------#####-----------------------------#####
   def check(self):
@@ -126,8 +129,8 @@ class Main(object):
       all_hit = True
       correct_answer = False
       for a in self.asteroids:
-        if not a.hit: # an asteroid hasn't been hit
-          if  self.z - a.loc[2] > MAX_DIST: # too far, kill it off NB directional
+        if not (a.hit and a.explode_seq > 100): # an asteroid hasn't been hit or it's still exploding
+          if  ((a.loc[0] - self.x) ** 2 + (a.loc[1] - self.y) ** 2 + (a.loc[2] - self.z) ** 2) ** 0.5 > MAX_DIST: # too far, kill it off NB directional
             a.hit = True
           else:
             all_hit = False
@@ -143,42 +146,50 @@ class Main(object):
   def reset(self):
     ''' put asteroids in start positions with correct textures etc.
     pass asteroid list to missile.
+
+    NB this sets various variables so needs to be run before main loop
     '''
     with open('game.ini', 'wb') as fp: #save status
       saved_status = {'score': self.score, 'energy':self.energy,
                         'questions':self.questions, 'q_pointer':self.q_pointer}
       pickle.dump(saved_status, fp)
     self.frame_count = 0
+    self.q_number = -1 # also use as flag indicate actually asking q
+    self.level = self.get_level()
     if self.mode == SHOOT:
-      level = self.get_level()
-      (self.x, self.y, self.z) = (level.start_location)
+      (self.x, self.y, self.z) = (self.level.start_location)
       self.asteroids = []
-      for i in range(level.num):
+      for i in range(self.level.num):
         a = self.asteroid_stock[i]
-        a.launch(self.shinesh, self.rockimg, level.start_loc, level.start_range,
-                (self.x, self.y, self.z), level.speed, level.speed_range)
+        a.launch(self.shinesh, self.rockimg, self.level.start_loc, self.level.start_range,
+                (self.x, self.y, self.z), self.level.speed, self.level.speed_range,
+                self.level.threshold)
         self.asteroids.append(a)
-      self.go_speed = level.go_speed
+      self.go_speed = self.level.go_speed
       self.q_text = self.default_string
       self.missile_pointer = 0
-      self.num_missiles = level.num_missiles
-      self.missile = level.missile
+      self.num_missiles = self.level.num_missiles
+      self.missile = self.level.missile
     else: # ask recharge questions
-      self.q_number = -1
       all_good = True
+      self.dx = self.dy = self.dz = 0.0
+      total = 0.0
       for i, q in enumerate(self.questions[:self.q_pointer]): #restricted list
-        ratio = q.right / (q.right + q.wrong + 0.5)
-        if ratio < 0.75:
-          self.q_number = i
-          break
-        elif ratio < 0.85:
+        q.ratio = (q.wrong + 0.25) / (q.right + 0.25) #wrongness
+        total += q.ratio
+        if q.ratio > 0.25:
           all_good = False
       if all_good: #add a new question for next time
         self.q_pointer += 1
         if self.q_pointer >= (len(self.questions) - 1):
           self.q_pointer = len(self.questions) - 1
       if self.q_number == -1: #all over threshold choose a random one
-        self.q_number = random.randint(0, self.q_pointer - 1)
+        r = random.uniform(0.0, total) # weight probability by q.ratio
+        upto = 0.0
+        for self.q_number, q in enumerate(self.questions[:self.q_pointer]):
+          upto += q.ratio
+          if (upto >= r):
+             break
       question, ans = self.questions[self.q_number].make_qanda()
       self.q_text = pi3d.String(camera=self.CAMERA2D, font=self.font, string=question,
                             is_3d=False, y=self.DISPLAY.height / 2.0 - 50.0, size=0.4)
@@ -194,7 +205,7 @@ class Main(object):
         a = self.asteroid_stock[i]
         a.launch(self.shinesh, self.ansimg[ans_num], (15.0 * ((i + offset) % 5) - 30.0, 0.0, 50.0),
               (8.0, 8.0, 2.0), (self.x, self.y, self.z), 0.03, 0.01,
-              threshold=5.0, correct_answer=(i == 0))
+              threshold=4.0, correct_answer=(i == 0))
         self.asteroids.append(a)
       #set missile
       self.go_speed = 0.01
@@ -245,6 +256,7 @@ class Main(object):
     self.energy_meter.draw()
     if self.mode == RECHARGE:
       self.q_text.draw()
+    self.target.draw()
 
     ##### get input for direction and firing ###########################
     fire = False
@@ -276,16 +288,23 @@ class Main(object):
 
     ##### act on results of input ######################################
     if fire:
+      if self.q_number > -1: # shooting at questions
+        self.level = self.levels[0]
       self.missiles[self.missile][self.missile_pointer].launch([self.x, self.y, self.z],
-                                  self.CAMERA.mtrx, 0.5, self.asteroids)
+              [self.dx / self.go_speed, self.dy / self.go_speed, self.dz / self.go_speed],
+              self.level.missile_speed, self.asteroids, g_asteroid=self.level.g_asteroid,
+              g_missile=self.level.g_missile)
       self.energy -= 0.05
       self.energy_meter.change_reading(self.energy)
       self.missiles[self.missile][self.missile_pointer].flag = True
       self.missile_pointer = (self.missile_pointer + 1) % self.num_missiles
 
-    self.x += self.CAMERA.mtrx[0, 3] * self.go_speed
-    self.y += self.CAMERA.mtrx[1, 3] * self.go_speed
-    self.z += self.CAMERA.mtrx[2, 3] * self.go_speed
+    self.dx = self.dx * 0.95 + self.CAMERA.mtrx[0, 3] * self.go_speed * 0.05
+    self.dy = self.dy * 0.95 + self.CAMERA.mtrx[1, 3] * self.go_speed * 0.05
+    self.dz = self.dz * 0.95 + self.CAMERA.mtrx[2, 3] * self.go_speed * 0.05
+    self.x += self.dx
+    self.y += self.dy
+    self.z += self.dz
     for m in self.missiles[self.missile][0:self.num_missiles]:
       if m.flag:
         m.draw()
@@ -294,23 +313,27 @@ class Main(object):
         if i > -1:
           m.flag = False
           if self.asteroids[i].test_hit(dist):
-            if self.mode == SHOOT:
+            if self.q_number == -1: # not asking actual question so score
               self.score += 0.025
               if self.score > 1.0:
                 self.score = 1.0
               self.score_meter.change_reading(self.score)
             else: # questioning
+              q = self.questions[self.q_number]
               if self.asteroids[i].correct_answer:
                 self.energy += 0.3
                 if self.energy > 1.0:
                   self.energy = 1.0
                 self.energy_meter.change_reading(self.energy)
-                self.questions[self.q_number].right += 1
+                q.right = q.right * 0.9 + 1.0 #exponential decay old scores
+                q.wrong = q.wrong * 0.9
               else:
-                self.questions[self.q_number].wrong += 1
+                q.right = q.right * 0.9
+                q.wrong = q.wrong * 0.9 + 1.0
 
     return True
 
+#####----------------------------#####-----------------------------#####
   def run(self):
     if PLATFORM == PLATFORM_ANDROID: # android <<<<<<<<<<<<<<<<<<<<<<<<<
       self.DISPLAY.android.set_loop(self.pi3dloop)
@@ -327,5 +350,7 @@ class Main(object):
       self.mouse.stop()
         
     self.DISPLAY.stop()
+#####----------------------------#####-----------------------------#####
+#####----------------------------#####-----------------------------#####
 
 Main().run() #create an instance of Main() then run the run() method
