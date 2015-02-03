@@ -260,6 +260,7 @@ class Main(object):
 
     ##### get input for direction and firing ###########################
     fire = False
+    jump = False
     if PLATFORM == PLATFORM_ANDROID: # android <<<<<<<<<<<<<<<<<<<<<<<<<
       if self.DISPLAY.android.screen.moved:
         self.rot -= self.DISPLAY.android.screen.touch.dx * 0.25
@@ -269,6 +270,8 @@ class Main(object):
       elif self.DISPLAY.android.screen.tapped:
         fire = True
         self.DISPLAY.android.screen.tapped = False
+        if self.DISPLAY.android.screen.touch.sx > 0.9 and self.DISPLAY.android.screen.touch.sy > 0.8:
+          jump = True
       #  self.DISPLAY.android.screen.double_tapped = False
     else: # other platforms >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
       mx, my = self.mouse.position()
@@ -281,12 +284,18 @@ class Main(object):
       #Press ESCAPE to terminate
       k = self.keys.read()
       if k >-1:
-        if k==ord('w'):  #key W
+        if k==ord(' '):  #key space
           fire = True
+        elif k==ord('x'): #x key
+          jump = True
         elif k==27:  #Escape key
           return False
 
     ##### act on results of input ######################################
+    if jump:
+      self.q_pointer = (self.q_pointer + 5) % len(questions)
+      print(self.q_pointer)
+      self.reset()
     if fire:
       if self.q_number > -1: # shooting at questions
         self.level = self.levels[0]

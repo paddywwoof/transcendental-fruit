@@ -3,6 +3,8 @@
 
 *.py[co]
 
+*.ini
+
 # Packages
 *.egg
 *.egg-info
