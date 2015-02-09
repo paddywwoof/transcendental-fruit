@@ -17,9 +17,11 @@ import os, pickle, glob
 SHOOT = 0
 RECHARGE = 1
 N_FRAMES = 3600 #120s at 30fps
+FLASH_FRAMES = 120
 RECHARGE_LEVEL = 0.1
 SHOOT_LEVEL = 0.9
-MAX_DIST = 600
+MAX_DIST = 600.0
+MIN_DIST = 4.0
 
 ########################################################################
 class Main(object):
@@ -93,10 +95,14 @@ class Main(object):
   ##### strings
   font = pi3d.Pngfont('fonts/Arial2.png', (200, 30, 10, 255))
   font.blend = True
+  font2 = pi3d.Pngfont('fonts/Arial2.png', (10, 200, 100, 255))
+  font2.blend = True
   default_string = pi3d.String(camera=CAMERA2D, font=font, string='RECHARGE',
                           is_3d=False, y=DISPLAY.height / 2.0 - 50.0, size=0.4)
   default_string.set_shader(flatsh)
   q_text = default_string
+  s_text = default_string
+  flash_count = 0
   ##### avatar camera
   rot = 0.0
   tilt = 0.0
@@ -106,7 +112,25 @@ class Main(object):
   go_speed = 0.2
 
   mode = SHOOT # 0 is shooting mode, 1 is recharge mode
-  timer = 0 # count up to N_FRAMES or all asteroids hit in shooting mode or correct asteroids hit in recharge mode
+
+
+#####----------------------------#####-----------------------------#####
+  def score_mod(self, amount):
+    ''' utility function to change score and flash up score and delta
+    '''
+    self.score += amount
+    if self.score > 1.0:
+      self.score = 1.0
+    elif self.score < 0.0:
+      self.score = 0.0
+    self.score_meter.change_reading(self.score)
+    font = self.font if amount < 0 else self.font2
+    self.s_text = pi3d.String(camera=self.CAMERA2D, font=font,
+                  string='{:,} >>{:,}<<'.format(int(1000000 * amount), int(1000000 * self.score)),
+                  is_3d=False, y=-self.DISPLAY.height / 2.0 + 50.0, size=0.4)
+    self.s_text.set_shader(self.flatsh)
+    self.flash_count = 0
+    
 
 #####----------------------------#####-----------------------------#####
   def get_level(self):
@@ -116,6 +140,7 @@ class Main(object):
     #  if self.score >= l.minv and self.score <= l.maxv:
     #    return l
     return self.levels[min(self.q_pointer, len(self.levels)) - 1]
+
 
 #####----------------------------#####-----------------------------#####
   def check(self):
@@ -133,8 +158,13 @@ class Main(object):
       correct_answer = False
       for a in self.asteroids:
         if not (a.hit and a.explode_seq > 100): # an asteroid hasn't been hit or it's still exploding
-          if  ((a.loc[0] - self.x) ** 2 + (a.loc[1] - self.y) ** 2 + (a.loc[2] - self.z) ** 2) ** 0.5 > MAX_DIST: # too far, kill it off NB directional
+          dist = ((a.loc[0] - self.x) ** 2 + (a.loc[1] - self.y) ** 2 + (a.loc[2] - self.z) ** 2) ** 0.5
+          if dist  > MAX_DIST: # too far, kill it off NB directional
             a.hit = True
+          elif dist < MIN_DIST:
+            self.score_mod(-0.005)
+            a.hit = True
+            a.explode_seq = 101
           else:
             all_hit = False
         elif a.correct_answer: # asteroid hit and it was correct answer
@@ -145,12 +175,13 @@ class Main(object):
         return True
       return False
 
+
 #####----------------------------#####-----------------------------#####
   def reset(self):
     ''' put asteroids in start positions with correct textures etc.
     pass asteroid list to missile.
 
-    NB this sets various variables so needs to be run before main loop
+    NB this sets various variables so needs to be run before main loop and check()
     '''
     with open('game.ini', 'wb') as fp: #save status
       saved_status = {'score': self.score, 'energy':self.energy,
@@ -218,7 +249,8 @@ class Main(object):
         self.asteroids.append(a)
       #set missile
       self.go_speed = 0.01
-   
+
+
 #####----------------------------#####-----------------------------#####
   def __init__(self):
     ''' need an instance to do initial settings with reset
@@ -240,6 +272,7 @@ class Main(object):
     self.q_number = 0 #set when question asked
     self.reset()
 
+
 #----############################-----#############################----#
 #####----------------------------#####-----------------------------#####
 #----############################-----#############################----#
@@ -257,8 +290,8 @@ class Main(object):
     if self.dust:
       self.dust.draw()
       self.dust.move()
-      if self.dust.test_hit((self.x, self.y, self.z)):
-        print('HIT DUST')
+      if (self.frame_count % 10) == 0 and self.dust.test_hit((self.x, self.y, self.z)):
+        self.score_mod(-0.0025)
     self.sphere.draw()
     for a in self.asteroids:
       a.draw()
@@ -270,6 +303,9 @@ class Main(object):
     self.energy_meter.draw()
     if self.mode == RECHARGE:
       self.q_text.draw()
+    if self.flash_count < FLASH_FRAMES:
+      self.s_text.draw()
+      self.flash_count += 1
     self.target.draw()
 
     ##### get input for direction and firing ###########################
@@ -311,7 +347,6 @@ class Main(object):
     ##### act on results of input ######################################
     if jump:
       self.q_pointer = (self.q_pointer + 5) % len(questions)
-      print(self.q_pointer)
       self.reset()
     if fire:
       if self.q_number > -1: # shooting at questions
@@ -338,12 +373,12 @@ class Main(object):
         i, dist = m.test_hits()
         if i > -1:
           m.flag = False
-          if self.asteroids[i].test_hit(dist):
+          a = self.asteroids[i]
+          if a.test_hit(dist):
             if self.q_number == -1: # not asking actual question so score
-              self.score += 0.025
-              if self.score > 1.0:
-                self.score = 1.0
-              self.score_meter.change_reading(self.score)
+              rng = 1.0 + (((a.loc[0] - self.x) ** 2 + (a.loc[1] - self.y) ** 2 + (a.loc[2] - self.z) ** 2) ** 0.5) / 25.0
+              score = 0.0005 * (1.0 - 0.5 / (0.5 + dist / a.threshold) / rng)
+              self.score_mod(score)
             else: # questioning
               q = self.questions[self.q_number]
               if self.asteroids[i].correct_answer:
@@ -374,8 +409,9 @@ class Main(object):
         pass
       self.keys.close()
       self.mouse.stop()
-        
+
     self.DISPLAY.stop()
+
 #####----------------------------#####-----------------------------#####
 #####----------------------------#####-----------------------------#####
 

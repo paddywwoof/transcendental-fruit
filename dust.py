@@ -15,15 +15,15 @@ class Dust(pi3d.Points):
     for i in spread:
       num *= i
     num = int(num / 500)
-    print(num)
     verts = [] # list of xyz tuples
+    self.xyz = set() # set of xyz tuples for quick checking membership
     for i in range(num):
-      verts.append((int(random.gauss(0, spread[0])), int(random.gauss(0, spread[1])),
-                    int(random.gauss(0, spread[1]))))
+      loc = tuple(int(random.gauss(0, spread[j])) for j in range(3))
+      verts.append(loc)
+      self.xyz.add((int(loc[0]/5), int(loc[1]/5), int(loc[2]/5)))
       
     super(Dust, self).__init__(vertices=verts, material=(0.6, 0.6, 1.0), point_size=10)
     self.set_shader(shader)
-    self.xyz = set(verts) # set of xyz tuples for quick checking membership
 
   def launch(self, box_location, box_size, target, speed, speed_range):
     # make start relative to self
@@ -43,7 +43,7 @@ class Dust(pi3d.Points):
     self.position(*self.loc)
 
   def test_hit(self, target):
-    xyz = tuple(int(target[i] + 0.5 - self.loc[i]) for i in range(3))
+    xyz = tuple(int((target[i] + 0.5 - self.loc[i])/5) for i in range(3))
     if xyz in self.xyz:
       return True
     return False

@@ -18,7 +18,6 @@ class Missile(pi3d.Model):
       self.buf = clone.buf
       self.vGroup = clone.vGroup
     self.set_normal_shine(bumpimg, 1.0, reflimg, 0.2)
-    print(shader)
     self.set_shader(shader)
     self.m_type = m_type
     self.flag = False
