@@ -1,0 +1,50 @@
+#!/usr/bin/python
+from __future__ import absolute_import, division, print_function, unicode_literals
+
+import demo
+import random
+import pi3d
+
+L_R = (0.0, 0.0, 0.0, 0.001, -0.001)
+U_D = (0.0, 0.0, 0.0, 0.0, -0.0001)
+
+########################################################################
+class Dust(pi3d.Points):
+  def __init__(self, shader, spread):
+    num = 1
+    for i in spread:
+      num *= i
+    num = int(num / 500)
+    print(num)
+    verts = [] # list of xyz tuples
+    for i in range(num):
+      verts.append((int(random.gauss(0, spread[0])), int(random.gauss(0, spread[1])),
+                    int(random.gauss(0, spread[1]))))
+      
+    super(Dust, self).__init__(vertices=verts, material=(0.6, 0.6, 1.0), point_size=10)
+    self.set_shader(shader)
+    self.xyz = set(verts) # set of xyz tuples for quick checking membership
+
+  def launch(self, box_location, box_size, target, speed, speed_range):
+    # make start relative to self
+    self.loc = [box_location[i] + target[i] + (random.random() - 0.5) * box_size[i] for i in range(3)]
+    self.position(*self.loc)
+    dx, dy, dz = target[0] - self.loc[0], target[1] - self.loc[1], target[2] - self.loc[2]
+    dist = (dx ** 2 + dy ** 2 + dz ** 2) ** 0.5
+    speed += (random.random() - 0.5) * speed_range
+    self.dx = speed * dx / dist * (0.6 + random.random() * 0.8)
+    self.dy = speed * dy / dist * (0.6 + random.random() * 0.8)
+    self.dz = speed * dz / dist * (0.6 + random.random() * 0.8)
+    
+  def move(self):
+    self.loc[0] += self.dx
+    self.loc[1] += self.dy
+    self.loc[2] += self.dz
+    self.position(*self.loc)
+
+  def test_hit(self, target):
+    xyz = tuple(int(target[i] + 0.5 - self.loc[i]) for i in range(3))
+    if xyz in self.xyz:
+      return True
+    return False
+

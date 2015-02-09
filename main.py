@@ -11,6 +11,7 @@ from missile import Missile
 from questions import Question, questions
 from meter import Meter
 from level import Level, levels
+from dust import Dust
 import os, pickle, glob
 
 SHOOT = 0
@@ -18,12 +19,12 @@ RECHARGE = 1
 N_FRAMES = 3600 #120s at 30fps
 RECHARGE_LEVEL = 0.1
 SHOOT_LEVEL = 0.9
-MAX_DIST = 300
+MAX_DIST = 600
 
 ########################################################################
 class Main(object):
   # Setup display and initialise pi3d
-  DISPLAY = pi3d.Display.create(x=50, y=50, far=10000, frames_per_second=30.0)
+  DISPLAY = pi3d.Display.create(x=250, y=100, far=10000, frames_per_second=30.0)
   ##### cameras
   CAMERA = pi3d.Camera()
   CAMERA2D = pi3d.Camera(is_3d=False)
@@ -80,9 +81,11 @@ class Main(object):
   missiles = []
   for i in range(5):
     missiles.append([]) # i.e. list of lists
-    missiles[i].append(Missile(i, bumpimg, reflimg, shinesh)) #zeroth is prototype
+    missiles[i].append(Missile(i, bumpimg, reflimg, shader)) #zeroth is prototype
     for j in range(4):
-      missiles[i].append(Missile(i, bumpimg, reflimg, (shinesh if i < 3 else shader), clone=missiles[i][0]))
+      missiles[i].append(Missile(i, bumpimg, reflimg, (shinesh if i < 2 else shader), clone=missiles[i][0]))
+  ##### dust
+  dust = None
   ##### meters
   w, h = DISPLAY.width, DISPLAY.height
   score_meter = Meter(matsh, CAMERA2D, -w/2.3, w*0.05, DISPLAY.height, value=0.0)
@@ -165,6 +168,12 @@ class Main(object):
                 (self.x, self.y, self.z), self.level.speed, self.level.speed_range,
                 self.level.threshold)
         self.asteroids.append(a)
+      if self.level.dust:
+        self.dust = Dust(self.matsh, self.level.dust)
+        self.dust.launch(self.level.start_loc, self.level.start_range, (self.x, self.y, self.z),
+                  self.level.speed, self.level.speed_range)
+      else:
+        self.dust = None
       self.go_speed = self.level.go_speed
       self.q_text = self.default_string
       self.missile_pointer = 0
@@ -175,7 +184,7 @@ class Main(object):
       self.dx = self.dy = self.dz = 0.0
       total = 0.0
       for i, q in enumerate(self.questions[:self.q_pointer]): #restricted list
-        q.ratio = (q.wrong + 0.25) / (q.right + 0.25) #wrongness
+        q.ratio = (q.wrong + 0.5) / (q.right + 0.5) #wrongness
         total += q.ratio
         if q.ratio > 0.25:
           all_good = False
@@ -183,13 +192,13 @@ class Main(object):
         self.q_pointer += 1
         if self.q_pointer >= (len(self.questions) - 1):
           self.q_pointer = len(self.questions) - 1
-      if self.q_number == -1: #all over threshold choose a random one
-        r = random.uniform(0.0, total) # weight probability by q.ratio
-        upto = 0.0
-        for self.q_number, q in enumerate(self.questions[:self.q_pointer]):
-          upto += q.ratio
-          if (upto >= r):
-             break
+      #if self.q_number == -1: #all over threshold choose a random one
+      r = random.uniform(0.0, total) # weight probability by q.ratio
+      upto = 0.0
+      for self.q_number, q in enumerate(self.questions[:self.q_pointer]):
+        upto += q.ratio
+        if (upto >= r):
+           break
       question, ans = self.questions[self.q_number].make_qanda()
       self.q_text = pi3d.String(camera=self.CAMERA2D, font=self.font, string=question,
                             is_3d=False, y=self.DISPLAY.height / 2.0 - 50.0, size=0.4)
@@ -245,6 +254,11 @@ class Main(object):
       self.reset()
 
     # have to draw from far to near for transparency
+    if self.dust:
+      self.dust.draw()
+      self.dust.move()
+      if self.dust.test_hit((self.x, self.y, self.z)):
+        print('HIT DUST')
     self.sphere.draw()
     for a in self.asteroids:
       a.draw()
@@ -290,6 +304,9 @@ class Main(object):
           jump = True
         elif k==27:  #Escape key
           return False
+      b = self.mouse.button_status()
+      if b == self.mouse.LEFT_BUTTON:
+        fire = True
 
     ##### act on results of input ######################################
     if jump:

@@ -18,6 +18,7 @@ class Missile(pi3d.Model):
       self.buf = clone.buf
       self.vGroup = clone.vGroup
     self.set_normal_shine(bumpimg, 1.0, reflimg, 0.2)
+    print(shader)
     self.set_shader(shader)
     self.m_type = m_type
     self.flag = False
@@ -52,22 +53,27 @@ class Missile(pi3d.Model):
       nearest_dist = 10000
       nearest_i = -1
       for i, t in enumerate(self.targets):
-        dx, dy, dz = t.loc[0] - self.loc[0], t.loc[1] - self.loc[1], t.loc[2] - self.loc[2]
-        dist = (dx ** 2 + dy ** 2 + dz ** 2) ** 0.5
-        dist_list.append(dist)
-        if dist < t.threshold and dist < nearest_dist and not t.hit:
-          nearest_dist = dist
-          nearest_i = i
-        if dist < 100.0 and self.g_asteroid != 0.0:
-          g_factor = self.g_asteroid / dist ** 3
-          t.dx -= dx * g_factor
-          t.dy -= dy * g_factor
-          t.dz -= dz * g_factor
-        if dist < 100.0 and self.g_missile != 0.0:
-          g_factor = self.g_missile / dist ** 3
-          self.dx += dx * g_factor
-          self.dy += dy * g_factor
-          self.dz += dz * g_factor
+        if t.hit:
+          dist_list.append(10000)
+          #print(i)
+        else:
+          dx, dy, dz = t.loc[0] - self.loc[0], t.loc[1] - self.loc[1], t.loc[2] - self.loc[2]
+          dist = (dx ** 2 + dy ** 2 + dz ** 2) ** 0.5
+          dist_list.append(dist)
+          #print(dist, i, t.threshold, nearest_dist, len(self.targets))
+          if dist < t.threshold and dist < nearest_dist:
+            nearest_dist = dist
+            nearest_i = i
+          if dist < 100.0 and self.g_asteroid != 0.0:
+            g_factor = self.g_asteroid / dist ** 3
+            t.dx -= dx * g_factor
+            t.dy -= dy * g_factor
+            t.dz -= dz * g_factor
+          if dist < 100.0 and self.g_missile != 0.0:
+            g_factor = self.g_missile / dist ** 3
+            self.dx += dx * g_factor
+            self.dy += dy * g_factor
+            self.dz += dz * g_factor
           
       if nearest_i > -1 and dist_list[nearest_i] > self.last_dist[nearest_i]:
         return nearest_i, self.last_dist[nearest_i]

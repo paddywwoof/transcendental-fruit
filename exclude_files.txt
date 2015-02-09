@@ -1,0 +1,15 @@
+# don't include
+
+#pickle file
+*.ini
+game.ini
+game.*
+
+#blend files
+*.blend*
+
+#git files
+.git/*
+
+#this and other txt files
+*.txt
