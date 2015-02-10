@@ -23,9 +23,10 @@ class Asteroid(pi3d.Model):
     self.threshold = threshold
     self.hit = False
     self.correct_answer = False # mark an asteroid as the correct answer
+    self.good = False # mark an asteroid as 'good' to loose marks if hit
     
   def launch(self, shader, texture, box_location, box_size, target, speed,
-              speed_range, threshold=None, correct_answer=False):
+              speed_range, threshold=None, correct_answer=False, good=False):
     self.shader = shader
     self.texture = texture
     self.set_draw_details(shader, [self.texture, self.bumpimg, self.reflimg], 1.0, 0.2)
@@ -41,6 +42,7 @@ class Asteroid(pi3d.Model):
     if threshold:
       self.threshold = threshold
     self.correct_answer = correct_answer
+    self.good = good
     self.hit = False
     self.explode_seq = -1
     self.scale(1.0, 1.0, 1.0)

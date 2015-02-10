@@ -39,6 +39,7 @@ class Main(object):
   bumpimg = pi3d.Texture('textures/moon_nm.jpg')
   reflimg = pi3d.Texture('textures/stars.jpg')
   rockimg = pi3d.Texture('textures/rock1.jpg')
+  goodimg = pi3d.Texture('textures/rock2.jpg')
   starimg = pi3d.Texture('textures/space1.jpg', flip=True)
   explimg = pi3d.Texture('models/ast_expl.png')
   cloudimg = pi3d.Texture('textures/earth_clouds.png', blend=True)
@@ -126,7 +127,7 @@ class Main(object):
     self.score_meter.change_reading(self.score)
     font = self.font if amount < 0 else self.font2
     self.s_text = pi3d.String(camera=self.CAMERA2D, font=font,
-                  string='{:,} >>{:,}<<'.format(int(1000000 * amount), int(1000000 * self.score)),
+                  string='{:,} >>> {:,}'.format(int(1000000 * amount), int(1000000 * self.score)),
                   is_3d=False, y=-self.DISPLAY.height / 2.0 + 50.0, size=0.4)
     self.s_text.set_shader(self.flatsh)
     self.flash_count = 0
@@ -134,12 +135,12 @@ class Main(object):
 
 #####----------------------------#####-----------------------------#####
   def get_level(self):
-    ''' utility function to get level from current score
+    ''' utility function to get level from current score and question
     '''
-    #for l in self.levels:
-    #  if self.score >= l.minv and self.score <= l.maxv:
-    #    return l
-    return self.levels[min(self.q_pointer, len(self.levels)) - 1]
+    for l in self.levels[(self.q_pointer - 1):]:
+      if self.score < l.maxv:
+        break
+    return l
 
 
 #####----------------------------#####-----------------------------#####
@@ -159,13 +160,13 @@ class Main(object):
       for a in self.asteroids:
         if not (a.hit and a.explode_seq > 100): # an asteroid hasn't been hit or it's still exploding
           dist = ((a.loc[0] - self.x) ** 2 + (a.loc[1] - self.y) ** 2 + (a.loc[2] - self.z) ** 2) ** 0.5
-          if dist  > MAX_DIST: # too far, kill it off NB directional
+          if dist  > MAX_DIST: # too far, kill it off
             a.hit = True
           elif dist < MIN_DIST:
             self.score_mod(-0.005)
             a.hit = True
             a.explode_seq = 101
-          else:
+          elif not a.good:
             all_hit = False
         elif a.correct_answer: # asteroid hit and it was correct answer
           correct_answer = True
@@ -195,9 +196,15 @@ class Main(object):
       self.asteroids = []
       for i in range(self.level.num):
         a = self.asteroid_stock[i]
-        a.launch(self.shinesh, self.rockimg, self.level.start_loc, self.level.start_range,
+        if i < self.level.num_good:
+          tex = self.goodimg
+          good = True
+        else:
+          tex = self.rockimg
+          good = False
+        a.launch(self.shinesh, tex, self.level.start_loc, self.level.start_range,
                 (self.x, self.y, self.z), self.level.speed, self.level.speed_range,
-                self.level.threshold)
+                threshold=self.level.threshold, good=good)
         self.asteroids.append(a)
       if self.level.dust:
         self.dust = Dust(self.matsh, self.level.dust)
@@ -344,6 +351,10 @@ class Main(object):
       if b == self.mouse.LEFT_BUTTON:
         fire = True
 
+    if self.tilt > 90:
+      self.tilt = 90
+    elif self.tilt < -90:
+      self.tilt = -90
     ##### act on results of input ######################################
     if jump:
       self.q_pointer = (self.q_pointer + 5) % len(questions)
@@ -376,8 +387,10 @@ class Main(object):
           a = self.asteroids[i]
           if a.test_hit(dist):
             if self.q_number == -1: # not asking actual question so score
-              rng = 1.0 + (((a.loc[0] - self.x) ** 2 + (a.loc[1] - self.y) ** 2 + (a.loc[2] - self.z) ** 2) ** 0.5) / 25.0
-              score = 0.0005 * (1.0 - 0.5 / (0.5 + dist / a.threshold) / rng)
+              rng = 1.0 + (((a.loc[0] - self.x) ** 2 + (a.loc[1] - self.y) ** 2 + (a.loc[2] - self.z) ** 2) ** 0.5) / 50.0
+              score = 0.002 * (1.0 - 0.25 / (0.25 + dist / a.threshold) / rng)
+              if a.good:
+                score *= -5.0
               self.score_mod(score)
             else: # questioning
               q = self.questions[self.q_number]
