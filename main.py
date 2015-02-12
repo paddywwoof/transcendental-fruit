@@ -6,7 +6,7 @@ import demo
 import random
 import pi3d
 from pi3d.constants import PLATFORM, PLATFORM_ANDROID
-from asteroid import Asteroid
+from asteroid import Asteroid, EXPLODE_N
 from missile import Missile
 from questions import Question, questions
 from meter import Meter
@@ -26,7 +26,7 @@ MIN_DIST = 4.0
 ########################################################################
 class Main(object):
   # Setup display and initialise pi3d
-  DISPLAY = pi3d.Display.create(x=250, y=100, far=10000, frames_per_second=30.0)
+  DISPLAY = pi3d.Display.create(x=100, y=100, far=10000, frames_per_second=30.0)
   ##### cameras
   CAMERA = pi3d.Camera()
   CAMERA2D = pi3d.Camera(is_3d=False)
@@ -148,6 +148,8 @@ class Main(object):
     ''' timer, asteroid hits, question/answer
     '''
     if self.mode == SHOOT and self.energy < RECHARGE_LEVEL:
+      for m in self.missiles[self.missile]: # tidy any still travelling missiles
+        m.flag = False
       self.mode = RECHARGE
     elif self.mode == RECHARGE and self.energy > SHOOT_LEVEL:
       self.mode = SHOOT
@@ -158,7 +160,7 @@ class Main(object):
       all_hit = True
       correct_answer = False
       for a in self.asteroids:
-        if not (a.hit and a.explode_seq > 100): # an asteroid hasn't been hit or it's still exploding
+        if not (a.hit and a.explode_seq > EXPLODE_N): # an asteroid hasn't been hit or it's still exploding
           dist = ((a.loc[0] - self.x) ** 2 + (a.loc[1] - self.y) ** 2 + (a.loc[2] - self.z) ** 2) ** 0.5
           if dist  > MAX_DIST: # too far, kill it off
             a.hit = True
@@ -191,7 +193,7 @@ class Main(object):
     self.frame_count = 0
     self.q_number = -1 # also use as flag indicate actually asking q
     self.level = self.get_level()
-    if self.mode == SHOOT:
+    if self.mode == SHOOT: # - launch new set of target asteroids
       (self.x, self.y, self.z) = (self.level.start_location)
       self.asteroids = []
       for i in range(self.level.num):
@@ -218,6 +220,8 @@ class Main(object):
       self.num_missiles = self.level.num_missiles
       self.missile = self.level.missile
     else: # ask recharge questions
+      for a in self.asteroid_stock: # kill off any stray asteroids in case they get hit by a still travelling missile
+        a.hit = True
       all_good = True
       self.dx = self.dy = self.dz = 0.0
       total = 0.0
@@ -294,11 +298,6 @@ class Main(object):
       self.reset()
 
     # have to draw from far to near for transparency
-    if self.dust:
-      self.dust.draw()
-      self.dust.move()
-      if (self.frame_count % 10) == 0 and self.dust.test_hit((self.x, self.y, self.z)):
-        self.score_mod(-0.0025)
     self.sphere.draw()
     for a in self.asteroids:
       a.draw()
@@ -307,6 +306,11 @@ class Main(object):
     self.moon.draw()
     self.clouds.draw()
     self.score_meter.draw()
+    if self.dust:
+      self.dust.draw()
+      self.dust.move()
+      if (self.frame_count % 10) == 0 and self.dust.test_hit((self.x, self.y, self.z)):
+        self.score_mod(-0.0025)
     self.energy_meter.draw()
     if self.mode == RECHARGE:
       self.q_text.draw()
@@ -357,7 +361,7 @@ class Main(object):
       self.tilt = -90
     ##### act on results of input ######################################
     if jump:
-      self.q_pointer = (self.q_pointer + 5) % len(questions)
+      #self.q_pointer = (self.q_pointer + 5) % len(questions)
       self.reset()
     if fire:
       if self.q_number > -1: # shooting at questions

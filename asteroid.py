@@ -5,6 +5,8 @@ import demo
 import random
 import pi3d
 
+EXPLODE_N = 50
+
 ########################################################################
 class Asteroid(pi3d.Model):
   def __init__(self, bumpimg, reflimg, explimg, threshold=10.0, clone=None):
@@ -64,12 +66,12 @@ class Asteroid(pi3d.Model):
     return False
 
   def draw(self):
-    if self.explode_seq > 100:
+    if self.explode_seq > EXPLODE_N:
       return
     elif self.explode_seq > -1:
-      sc_fact = 1.02 ** self.explode_seq
+      sc_fact = 1.04 ** self.explode_seq
       self.scale(sc_fact, sc_fact, sc_fact)
-      self.set_alpha((100.0 - self.explode_seq) / 100.0)
+      self.set_alpha((EXPLODE_N - self.explode_seq) / EXPLODE_N)
       self.explode_seq += 1
       super(Asteroid, self).draw(self.shader, [self.explimg, self.bumpimg,
                                   self.reflimg], 1.0, 0.5) #exploding
