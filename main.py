@@ -12,21 +12,23 @@ from questions import Question, questions
 from meter import Meter
 from level import Level, levels
 from dust import Dust
-import os, pickle, glob
+
+import os, pickle, glob, math
 
 SHOOT = 0
 RECHARGE = 1
-N_FRAMES = 3600 #120s at 30fps
+N_FRAMES = 2000 #120s at 30fps
 FLASH_FRAMES = 120
 RECHARGE_LEVEL = 0.1
 SHOOT_LEVEL = 0.9
 MAX_DIST = 600.0
 MIN_DIST = 4.0
+MAX_DUST_DAMAGE = 0.03
 
 ########################################################################
 class Main(object):
   # Setup display and initialise pi3d
-  DISPLAY = pi3d.Display.create(x=100, y=100, far=10000, frames_per_second=30.0)
+  DISPLAY = pi3d.Display.create(x=100, y=100, far=15000, frames_per_second=30.0)
   ##### cameras
   CAMERA = pi3d.Camera()
   CAMERA2D = pi3d.Camera(is_3d=False)
@@ -46,6 +48,7 @@ class Main(object):
   earthimg = pi3d.Texture('textures/world_map.jpg')
   moonimg = pi3d.Texture('textures/moon.jpg')
   targimg = pi3d.Texture('textures/target.png', blend=True)
+  magmaimg = pi3d.Texture('textures/magma.jpg')
   ansimg = {}
   fnames = glob.glob('textures/???.jpg')
   for f in fnames:
@@ -53,22 +56,22 @@ class Main(object):
   ##### environment sphere
   sphere = pi3d.Sphere(radius=4000.0, rz=90, invert=True)
   sphere.set_draw_details(flatsh, [starimg])
-  sphere.set_fog((0.0, 0.0, 0.0, 1.0), 12000)
+  sphere.set_fog((0.0, 0.0, 0.0, 1.0), 15000)
   ##### earth
   earth = pi3d.Sphere(radius=1000.0, slices=16, sides=32)
   earth.set_draw_details(shader, [earthimg])
-  earth.set_fog((0.0, 0.0, 0.0, 1.0), 12000)
+  earth.set_fog((0.0, 0.0, 0.0, 1.0), 15000)
   earth.positionX(2400.0)
   ##### clouds
   clouds = pi3d.Sphere(radius=1020.0, slices=16, sides=32)
   clouds.set_draw_details(shader, [cloudimg])
-  clouds.set_fog((0.0, 0.0, 0.0, 1.0), 12000)
+  clouds.set_fog((0.0, 0.0, 0.0, 1.0), 15000)
   clouds.positionX(2400.0)
   ##### moon
   moon = pi3d.Sphere(radius=500.0, slices=24, sides=24)
   moon.set_draw_details(shader, [moonimg])
-  moon.set_fog((0.0, 0.0, 0.0, 1.0), 12000)
-  moon.positionX(-2400.0)
+  moon.set_fog((0.0, 0.0, 0.0, 1.0), 15000)
+  moon.positionX(-2000.0)
   ##### target
   target = pi3d.Sprite(w=64, h=64, camera=CAMERA2D)
   target.set_draw_details(flatsh, [targimg])
@@ -89,9 +92,10 @@ class Main(object):
       missiles[i].append(Missile(i, bumpimg, reflimg, (shinesh if i < 2 else shader), clone=missiles[i][0]))
   ##### dust
   dust = None
+  dust_damage_tally = 0
   ##### meters
   w, h = DISPLAY.width, DISPLAY.height
-  score_meter = Meter(matsh, CAMERA2D, -w/2.3, w*0.05, DISPLAY.height, value=0.0)
+  health_meter = Meter(matsh, CAMERA2D, -w/2.3, w*0.05, DISPLAY.height, value=0.0)
   energy_meter = Meter(matsh, CAMERA2D, w/2.3, w*0.05, DISPLAY.height, value=0.0)
   ##### strings
   font = pi3d.Pngfont('fonts/Arial2.png', (200, 30, 10, 255))
@@ -102,11 +106,20 @@ class Main(object):
                           is_3d=False, y=DISPLAY.height / 2.0 - 50.0, size=0.4)
   default_string.set_shader(flatsh)
   q_text = default_string
-  s_text = default_string
+  s_text = None
   flash_count = 0
+  ##### end sequence
+  magma = pi3d.Sphere(radius=900.0, slices=16, sides=32)
+  magma.set_draw_details(shader, [magmaimg])
+  magma.set_fog((0.0, 0.0, 0.0, 1.0), 15000)
+  magma.set_alpha(0.45)
+  end_count = -1
+  magma.positionX(2400.0)
   ##### avatar camera
   rot = 0.0
   tilt = 0.0
+  drot = 0.0 # rate of rot, for touch screen 'gliding'
+  dtilt = 0.0
   x, y, z = 0.0, 0.0, 0.0
   dx, dy, dz = 0.0, 0.0, 0.0
 
@@ -116,19 +129,50 @@ class Main(object):
 
 
 #####----------------------------#####-----------------------------#####
+  def endgame(self):
+    # write score to history if in top 5
+    self.l_number = 0 #start as 0 each time it runs
+    self.health = 1.0 #start off full health each time
+    self.scores.append(self.score)
+    self.scores.sort(reverse=True)
+    self.scores = self.scores[0:5] # cut off the first 5
+    #self.score = 0 set this to zero after end of world sequence!
+    self.q_text = self.high_score_text()
+    self.end_count = 500
+    self.x, self.y, self.z = -2300, 50, 590.0
+    self.CAMERA.position((self.x, self.y, self.z))
+    self.tilt, self.rot = self.CAMERA.point_at([self.earth.x(), self.earth.y(), self.earth.z()])
+
+    
+
+#####----------------------------#####-----------------------------#####
+  def high_score_text(self):
+    text = '\n'.join(['{:,}'.format(i) for i in self.scores])
+    pi3d_string = pi3d.String(camera=self.CAMERA2D, font=self.font,
+                  string=text, justify='c', is_3d=False, y=50.0, x=100.0, size=0.3)
+    pi3d_string.set_shader(self.flatsh)
+    return pi3d_string
+
+
+#####----------------------------#####-----------------------------#####
   def score_mod(self, amount):
     ''' utility function to change score and flash up score and delta
     '''
-    self.score += amount
-    if self.score > 1.0:
-      self.score = 1.0
-    elif self.score < 0.0:
-      self.score = 0.0
-    self.score_meter.change_reading(self.score)
-    font = self.font if amount < 0 else self.font2
+    if amount < 0: # this is a reduction in health
+      font = self.font # red
+      self.health += amount
+      amount = -100 * amount
+      if self.health < 0.0:
+        self.endgame()
+      self.health_meter.change_reading(self.health)
+      prefix = '%'
+    else:
+      self.score += amount
+      font = self.font2 # green
+      prefix = '+'
     self.s_text = pi3d.String(camera=self.CAMERA2D, font=font,
-                  string='{:,} >>> {:,}'.format(int(1000000 * amount), int(1000000 * self.score)),
-                  is_3d=False, y=-self.DISPLAY.height / 2.0 + 50.0, size=0.4)
+                  string='{}{:,}'.format(prefix, amount),
+                  is_3d=False, y=-self.DISPLAY.height / 2.0 + 50.0, size=0.6)
     self.s_text.set_shader(self.flatsh)
     self.flash_count = 0
     
@@ -137,10 +181,7 @@ class Main(object):
   def get_level(self):
     ''' utility function to get level from current score and question
     '''
-    for l in self.levels[(self.q_pointer - 1):]:
-      if self.score < l.maxv:
-        break
-    return l
+    return self.levels[min(self.l_number, len(self.levels) - 1)]
 
 
 #####----------------------------#####-----------------------------#####
@@ -151,6 +192,7 @@ class Main(object):
       for m in self.missiles[self.missile]: # tidy any still travelling missiles
         m.flag = False
       self.mode = RECHARGE
+      self.q_text = self.default_string
     elif self.mode == RECHARGE and self.energy > SHOOT_LEVEL:
       self.mode = SHOOT
     self.frame_count += 1
@@ -162,10 +204,12 @@ class Main(object):
       for a in self.asteroids:
         if not (a.hit and a.explode_seq > EXPLODE_N): # an asteroid hasn't been hit or it's still exploding
           dist = ((a.loc[0] - self.x) ** 2 + (a.loc[1] - self.y) ** 2 + (a.loc[2] - self.z) ** 2) ** 0.5
-          if dist  > MAX_DIST: # too far, kill it off
+          if dist  > MAX_DIST or self.frame_count == N_FRAMES: # too far or out of time, kill it off
             a.hit = True
+            a.explode_seq = 101
+            self.score_mod(-0.015) # penalty for escaping asteroid -1.5%
           elif dist < MIN_DIST:
-            self.score_mod(-0.005)
+            self.score_mod(-0.3) # penalty for bumping into asteroid -30%
             a.hit = True
             a.explode_seq = 101
           elif not a.good:
@@ -187,8 +231,9 @@ class Main(object):
     NB this sets various variables so needs to be run before main loop and check()
     '''
     with open('game.ini', 'wb') as fp: #save status
-      saved_status = {'score': self.score, 'energy':self.energy,
-                        'questions':self.questions, 'q_pointer':self.q_pointer}
+      saved_status = {'scores': self.scores, 'energy':self.energy,
+                    'questions':self.questions, 'q_pointer':self.q_pointer,
+                    'score': self.score, 'l_number': self.l_number}
       pickle.dump(saved_status, fp)
     self.frame_count = 0
     self.q_number = -1 # also use as flag indicate actually asking q
@@ -212,13 +257,20 @@ class Main(object):
         self.dust = Dust(self.matsh, self.level.dust)
         self.dust.launch(self.level.start_loc, self.level.start_range, (self.x, self.y, self.z),
                   self.level.speed, self.level.speed_range)
+        self.dust_damage_tally = 0
       else:
         self.dust = None
       self.go_speed = self.level.go_speed
-      self.q_text = self.default_string
+      #self.q_text = self.default_string
       self.missile_pointer = 0
       self.num_missiles = self.level.num_missiles
       self.missile = self.level.missile
+      self.l_number += 1
+      if self.health < 1.0:
+        if (self.l_number % 10) == 1:
+          self.health = 1.0 # full recovery each progression to new missile
+        else:
+          self.health += 0.025 # heath boost each round 2.5%
     else: # ask recharge questions
       for a in self.asteroid_stock: # kill off any stray asteroids in case they get hit by a still travelling missile
         a.hit = True
@@ -270,17 +322,26 @@ class Main(object):
     if os.path.isfile('game.ini'):
       with open('game.ini', 'rb') as fp:
         saved_status = pickle.load(fp)
-        self.score = saved_status['score']
+        self.scores = saved_status['scores']
         self.energy = saved_status['energy']
         self.questions = saved_status['questions']
         self.q_pointer = saved_status['q_pointer']
+        self.score = saved_status['score']
+        self.l_number = saved_status['l_number']
     else:
-      self.score = 0.0
+      self.scores = []
       self.energy = 1.0
       self.questions = questions #from imported questions
-      self.q_pointer = 1 #number to slice with not really pointer
+      self.q_pointer = 1 #number to slice with, not really pointer
+      self.score = 0
+      self.l_number = 0
     self.mode = SHOOT
     self.q_number = 0 #set when question asked
+    self.health = 1.0 #start off full health each time
+    self.health_meter.change_reading(1.0)
+    self.energy_meter.change_reading(1.0)
+    self.s_text = self.high_score_text()
+    self.s_text.set_shader(self.flatsh)
     self.reset()
 
 
@@ -294,51 +355,85 @@ class Main(object):
     self.CAMERA.position((self.x, self.y, self.z))
     self.sphere.position(self.x, self.y, self.z)
 
-    if self.check():
-      self.reset()
-
     # have to draw from far to near for transparency
     self.sphere.draw()
-    for a in self.asteroids:
-      a.draw()
-      a.move()
+    if (self.frame_count % 30) == 0:
+      self.earth.rotateIncY(-0.07)
+      self.clouds.rotateIncY(-0.11)
     self.earth.draw()
     self.moon.draw()
     self.clouds.draw()
-    self.score_meter.draw()
-    if self.dust:
-      self.dust.draw()
-      self.dust.move()
-      if (self.frame_count % 10) == 0 and self.dust.test_hit((self.x, self.y, self.z)):
-        self.score_mod(-0.0025)
-    self.energy_meter.draw()
-    if self.mode == RECHARGE:
-      self.q_text.draw()
+    if self.end_count > 0: # end or world sequence
+      end_text = "the END!.. "
+      self.magma.draw()
+      self.magma.translateX(-1.5)
+      self.magma.rotateIncX(0.1)
+      self.end_count -= 1
+    elif self.end_count == 0: # reset end of world
+      end_text = ""
+      self.score = 0
+      self.magma.positionX(2400)
+      self.end_count = -1
+      self.reset()
+    else: # normal drawing etc
+      end_text = ""
+      for a in self.asteroids:
+        a.draw()
+        a.move()
+      self.health_meter.draw()
+      if self.dust:
+        self.dust.draw()
+        self.dust.move()
+        if ((self.frame_count % 10) == 0 and
+             self.dust.test_hit((self.x, self.y, self.z)) and
+             self.dust_damage_tally < MAX_DUST_DAMAGE):
+               # to prevent destruction if going same direction as dust
+          self.score_mod(-0.002) # hit by dust -0.2%
+          self.dust_damage_tally += 0.002 
+      self.energy_meter.draw()
+      if self.mode == RECHARGE or self.l_number <= 1:
+        self.q_text.draw()
+      self.target.draw()
+
+      if self.check():
+        self.reset()
+
     if self.flash_count < FLASH_FRAMES:
-      self.s_text.draw()
       self.flash_count += 1
-    self.target.draw()
+      self.s_text.translateY(-0.5)
+    elif self.flash_count == FLASH_FRAMES:
+      self.s_text = pi3d.String(camera=self.CAMERA2D, font=self.font2,
+                    string='{}{:,}'.format(end_text, self.score),
+                    is_3d=False, y=-self.DISPLAY.height / 2.0 + 50.0, size=0.4)
+      self.s_text.set_shader(self.flatsh)
+    self.s_text.draw()
 
     ##### get input for direction and firing ###########################
     fire = False
     jump = False
     if PLATFORM == PLATFORM_ANDROID: # android <<<<<<<<<<<<<<<<<<<<<<<<<
-      if self.DISPLAY.android.screen.moved:
-        self.rot -= self.DISPLAY.android.screen.touch.dx * 0.25
-        self.tilt += self.DISPLAY.android.screen.touch.dy * 0.25
-        self.DISPLAY.android.screen.moved = False
-        self.DISPLAY.android.screen.tapped = False
-      elif self.DISPLAY.android.screen.tapped:
+      self.rot += self.drot
+      self.tilt += self.dtilt
+      self.drot *= 0.85 # damping
+      self.dtilt *= 0.85
+      scr = self.DISPLAY.android.screen # alias for brevity!
+      if scr.moved:
+        self.drot -= scr.touch.dsx * 20.0
+        self.dtilt += scr.touch.dsy * 15.0
+        scr.moved = False
+        scr.tapped = False
+      elif scr.tapped or scr.double_tapped:
         fire = True
-        self.DISPLAY.android.screen.tapped = False
-        if self.DISPLAY.android.screen.touch.sx > 0.9 and self.DISPLAY.android.screen.touch.sy > 0.8:
+        scr.tapped = False
+        scr.double_tapped = False
+        if scr.touch.sx > 0.9 and scr.touch.sy > 0.8:
           jump = True
       #  self.DISPLAY.android.screen.double_tapped = False
     else: # other platforms >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
       mx, my = self.mouse.position()
 
-      self.rot -= (mx - self.omx) * 0.2
-      self.tilt += (my - self.omy) * 0.2
+      self.rot -= (mx - self.omx) * 0.1
+      self.tilt += (my - self.omy) * 0.1
       self.omx = mx
       self.omy = my
 
@@ -361,13 +456,14 @@ class Main(object):
       self.tilt = -90
     ##### act on results of input ######################################
     if jump:
-      #self.q_pointer = (self.q_pointer + 5) % len(questions)
-      self.reset()
+      #self.l_number = (self.l_number + 5) % len(questions)
+      #self.reset()
+      self.frame_count = N_FRAMES - 1 # go to final tidy up frame
     if fire:
       if self.q_number > -1: # shooting at questions
         self.level = self.levels[0]
       self.missiles[self.missile][self.missile_pointer].launch([self.x, self.y, self.z],
-              [self.dx / self.go_speed, self.dy / self.go_speed, self.dz / self.go_speed],
+              self.CAMERA.mtrx[0:3, 3], #[self.dx / self.go_speed, self.dy / self.go_speed, self.dz / self.go_speed],
               self.level.missile_speed, self.asteroids, g_asteroid=self.level.g_asteroid,
               g_missile=self.level.g_missile)
       self.energy -= 0.05
@@ -392,9 +488,9 @@ class Main(object):
           if a.test_hit(dist):
             if self.q_number == -1: # not asking actual question so score
               rng = 1.0 + (((a.loc[0] - self.x) ** 2 + (a.loc[1] - self.y) ** 2 + (a.loc[2] - self.z) ** 2) ** 0.5) / 50.0
-              score = 0.002 * (1.0 - 0.25 / (0.25 + dist / a.threshold) / rng)
+              score = int(2000 * (1.0 - 0.25 / (0.25 + dist / a.threshold) / rng))
               if a.good:
-                score *= -5.0
+                score = -0.25 # penalty for hitting a good asteroid 25%
               self.score_mod(score)
             else: # questioning
               q = self.questions[self.q_number]
@@ -422,7 +518,7 @@ class Main(object):
       self.mouse = pi3d.Mouse(restrict = False)
       self.mouse.start()
       self.omx, self.omy = self.mouse.position()
-      while self.pi3dloop(0.0):
+      while self.pi3dloop(0.0): # not using the argument kivy passes
         pass
       self.keys.close()
       self.mouse.stop()
