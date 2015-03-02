@@ -40,3 +40,5 @@ documentation/_build/html/*
 documentation/conf.py
 documentation/Makefile
 
+# blender
+*.blend*

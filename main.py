@@ -10,7 +10,7 @@ from asteroid import Asteroid, EXPLODE_N
 from missile import Missile
 from questions import Question, questions
 from meter import Meter
-from level import Level, levels
+from level import Level, levels, level_names
 from dust import Dust
 
 import os, pickle, glob, math
@@ -21,9 +21,14 @@ N_FRAMES = 2000 #120s at 30fps
 FLASH_FRAMES = 120
 RECHARGE_LEVEL = 0.1
 SHOOT_LEVEL = 0.9
+
+# adjust following to make game nicely balanced
 MAX_DIST = 600.0
 MIN_DIST = 4.0
-MAX_DUST_DAMAGE = 0.03
+MAX_DUST_DAMAGE = 0.1
+ESCAPER = -0.025
+BUMP = -0.30
+TOP_UP = 0.04
 
 ########################################################################
 class Main(object):
@@ -62,6 +67,7 @@ class Main(object):
   earth.set_draw_details(shader, [earthimg])
   earth.set_fog((0.0, 0.0, 0.0, 1.0), 15000)
   earth.positionX(2400.0)
+  earth.rotateToY(360.0 * random.random())
   ##### clouds
   clouds = pi3d.Sphere(radius=1020.0, slices=16, sides=32)
   clouds.set_draw_details(shader, [cloudimg])
@@ -192,7 +198,8 @@ class Main(object):
       for m in self.missiles[self.missile]: # tidy any still travelling missiles
         m.flag = False
       self.mode = RECHARGE
-      self.q_text = self.default_string
+      if (self.l_number % 10) != 1:
+        self.q_text = self.default_string
     elif self.mode == RECHARGE and self.energy > SHOOT_LEVEL:
       self.mode = SHOOT
     self.frame_count += 1
@@ -205,11 +212,13 @@ class Main(object):
         if not (a.hit and a.explode_seq > EXPLODE_N): # an asteroid hasn't been hit or it's still exploding
           dist = ((a.loc[0] - self.x) ** 2 + (a.loc[1] - self.y) ** 2 + (a.loc[2] - self.z) ** 2) ** 0.5
           if dist  > MAX_DIST or self.frame_count == N_FRAMES: # too far or out of time, kill it off
+            if a.good: # a good asteroid has got through, hurrah
+              self.health += TOP_UP
             a.hit = True
             a.explode_seq = 101
-            self.score_mod(-0.015) # penalty for escaping asteroid -1.5%
+            self.score_mod(ESCAPER) # penalty for escaping asteroid -1.5%
           elif dist < MIN_DIST:
-            self.score_mod(-0.3) # penalty for bumping into asteroid -30%
+            self.score_mod(BUMP) # penalty for bumping into asteroid -30%
             a.hit = True
             a.explode_seq = 101
           elif not a.good:
@@ -233,7 +242,8 @@ class Main(object):
     with open('game.ini', 'wb') as fp: #save status
       saved_status = {'scores': self.scores, 'energy':self.energy,
                     'questions':self.questions, 'q_pointer':self.q_pointer,
-                    'score': self.score, 'l_number': self.l_number}
+                    'score': self.score, 'l_number': self.l_number,
+                    'health': self.health}
       pickle.dump(saved_status, fp)
     self.frame_count = 0
     self.q_number = -1 # also use as flag indicate actually asking q
@@ -266,11 +276,16 @@ class Main(object):
       self.num_missiles = self.level.num_missiles
       self.missile = self.level.missile
       self.l_number += 1
-      if self.health < 1.0:
-        if (self.l_number % 10) == 1:
-          self.health = 1.0 # full recovery each progression to new missile
-        else:
-          self.health += 0.025 # heath boost each round 2.5%
+      if (self.l_number % 10) == 1:
+        #self.health += TOP_UP # major recovery each progression to new missile
+        self.q_text = pi3d.String(camera=self.CAMERA2D, font=self.font,
+                          string='level ' + level_names[int((self.l_number - 1) / 10) % len(level_names)],
+                          is_3d=False, y=self.DISPLAY.height / 2.0 - 50.0, size=0.4)
+        self.q_text.set_shader(self.flatsh)
+      else:
+        self.health += 0.025 # heath boost each round 2.5%
+      if self.health > 1.0:
+        self.health = 1.0
     else: # ask recharge questions
       for a in self.asteroid_stock: # kill off any stray asteroids in case they get hit by a still travelling missile
         a.hit = True
@@ -328,6 +343,7 @@ class Main(object):
         self.q_pointer = saved_status['q_pointer']
         self.score = saved_status['score']
         self.l_number = saved_status['l_number']
+        self.health = saved_status['health']
     else:
       self.scores = []
       self.energy = 1.0
@@ -335,9 +351,11 @@ class Main(object):
       self.q_pointer = 1 #number to slice with, not really pointer
       self.score = 0
       self.l_number = 0
+      self.health = 1.0 #start off full health each time
+    #self.l_number = 39
     self.mode = SHOOT
     self.q_number = 0 #set when question asked
-    self.health = 1.0 #start off full health each time
+    #self.health = 1.0 #start off full health each time
     self.health_meter.change_reading(1.0)
     self.energy_meter.change_reading(1.0)
     self.s_text = self.high_score_text()
@@ -365,6 +383,10 @@ class Main(object):
     self.clouds.draw()
     if self.end_count > 0: # end or world sequence
       end_text = "the END!.. "
+      alpha = self.end_count / 500.0
+      self.earth.set_alpha(alpha)
+      self.clouds.set_alpha(alpha)
+      self.magma.set_alpha(alpha)
       self.magma.draw()
       self.magma.translateX(-1.5)
       self.magma.rotateIncX(0.1)
@@ -374,6 +396,8 @@ class Main(object):
       self.score = 0
       self.magma.positionX(2400)
       self.end_count = -1
+      self.earth.set_alpha(1.0)
+      self.clouds.set_alpha(1.0)
       self.reset()
     else: # normal drawing etc
       end_text = ""
@@ -389,9 +413,9 @@ class Main(object):
              self.dust_damage_tally < MAX_DUST_DAMAGE):
                # to prevent destruction if going same direction as dust
           self.score_mod(-0.002) # hit by dust -0.2%
-          self.dust_damage_tally += 0.002 
+          self.dust_damage_tally += 0.005 
       self.energy_meter.draw()
-      if self.mode == RECHARGE or self.l_number <= 1:
+      if self.mode == RECHARGE or (self.l_number % 10) == 1:
         self.q_text.draw()
       self.target.draw()
 
