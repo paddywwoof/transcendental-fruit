@@ -26,9 +26,10 @@ SHOOT_LEVEL = 0.9
 MAX_DIST = 600.0
 MIN_DIST = 4.0
 MAX_DUST_DAMAGE = 0.1
+DUST_DAMAGE = -0.005
 ESCAPER = -0.025
 BUMP = -0.30
-TOP_UP = 0.04
+TOP_UP = 0.04 # per good asteroid
 
 ########################################################################
 class Main(object):
@@ -103,6 +104,12 @@ class Main(object):
   w, h = DISPLAY.width, DISPLAY.height
   health_meter = Meter(matsh, CAMERA2D, -w/2.3, w*0.05, DISPLAY.height, value=0.0)
   energy_meter = Meter(matsh, CAMERA2D, w/2.3, w*0.05, DISPLAY.height, value=0.0)
+  ##### skip button
+  skip_button = pi3d.Triangle(camera=CAMERA2D, x=w*0.45, y=h*0.4, z=1.0,
+                              corners=((0, 0), (0, h*0.1),(w*0.05,h*0.05)))
+  skip_button.set_material((0.7, 0.8, 1.0))
+  skip_button.set_shader(matsh)
+  skip_button.set_alpha(0.1)
   ##### strings
   font = pi3d.Pngfont('fonts/Arial2.png', (200, 30, 10, 255))
   font.blend = True
@@ -195,8 +202,8 @@ class Main(object):
     ''' timer, asteroid hits, question/answer
     '''
     if self.mode == SHOOT and self.energy < RECHARGE_LEVEL:
-      for m in self.missiles[self.missile]: # tidy any still travelling missiles
-        m.flag = False
+      #for m in self.missiles[self.missile]: # tidy any still travelling missiles
+      #  m.flag = False
       self.mode = RECHARGE
       if (self.l_number % 10) != 1:
         self.q_text = self.default_string
@@ -412,12 +419,13 @@ class Main(object):
              self.dust.test_hit((self.x, self.y, self.z)) and
              self.dust_damage_tally < MAX_DUST_DAMAGE):
                # to prevent destruction if going same direction as dust
-          self.score_mod(-0.002) # hit by dust -0.2%
-          self.dust_damage_tally += 0.005 
+          self.score_mod(DUST_DAMAGE) # hit by dust -0.5%
+          self.dust_damage_tally += DUST_DAMAGE 
       self.energy_meter.draw()
       if self.mode == RECHARGE or (self.l_number % 10) == 1:
         self.q_text.draw()
       self.target.draw()
+      self.skip_button.draw()
 
       if self.check():
         self.reset()
@@ -435,24 +443,33 @@ class Main(object):
     ##### get input for direction and firing ###########################
     fire = False
     jump = False
+    cheat = False
     if PLATFORM == PLATFORM_ANDROID: # android <<<<<<<<<<<<<<<<<<<<<<<<<
-      self.rot += self.drot
-      self.tilt += self.dtilt
-      self.drot *= 0.85 # damping
-      self.dtilt *= 0.85
+      #self.skip_button.draw()
       scr = self.DISPLAY.android.screen # alias for brevity!
+      if scr.touch and scr.touch.ud['down']: #still touching: damped
+        damping = 0.0
+      else:
+        damping = 0.98 #low damping unless touch still down
+        
       if scr.moved:
-        self.drot -= scr.touch.dsx * 20.0
-        self.dtilt += scr.touch.dsy * 15.0
+        damping = 0.65 #if moving use medium damping for speed multiplier
+        sensitivity = 25.0
+        self.drot -= scr.touch.dsx * sensitivity
+        self.dtilt += scr.touch.dsy * sensitivity
         scr.moved = False
-        scr.tapped = False
       elif scr.tapped or scr.double_tapped:
         fire = True
         scr.tapped = False
         scr.double_tapped = False
-        if scr.touch.sx > 0.9 and scr.touch.sy > 0.8:
+        if scr.touch.sx > 0.90 and scr.touch.sy > 0.8:
           jump = True
-      #  self.DISPLAY.android.screen.double_tapped = False
+          if scr.previous_touch.ud['down'] and scr.previous_touch.sx > 0.9 and scr.previous_touch.sy < 0.2:
+            cheat = True
+      self.rot += self.drot
+      self.tilt += self.dtilt
+      self.drot *= damping
+      self.dtilt *= damping
     else: # other platforms >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
       mx, my = self.mouse.position()
 
@@ -468,6 +485,9 @@ class Main(object):
           fire = True
         elif k==ord('x'): #x key
           jump = True
+        elif k==ord('4'): #cheat
+          jump = True
+          cheat = True
         elif k==27:  #Escape key
           return False
       b = self.mouse.button_status()
@@ -483,6 +503,10 @@ class Main(object):
       #self.l_number = (self.l_number + 5) % len(questions)
       #self.reset()
       self.frame_count = N_FRAMES - 1 # go to final tidy up frame
+      if cheat:
+        self.score = 0
+        self.health = 1.0
+        self.energy = 1.0
     if fire:
       if self.q_number > -1: # shooting at questions
         self.level = self.levels[0]
