@@ -21,6 +21,7 @@ N_FRAMES = 2000 #120s at 30fps
 FLASH_FRAMES = 120
 RECHARGE_LEVEL = 0.1
 SHOOT_LEVEL = 0.9
+MOVED_FRAMES = 5 
 
 # adjust following to make game nicely balanced
 MAX_DIST = 600.0
@@ -55,6 +56,9 @@ class Main(object):
   moonimg = pi3d.Texture('textures/moon.jpg')
   targimg = pi3d.Texture('textures/target.png', blend=True)
   magmaimg = pi3d.Texture('textures/magma.jpg')
+  bronzeimg = pi3d.Texture('textures/bronze.png', blend=True)
+  silverimg = pi3d.Texture('textures/silver.png', blend=True)
+  goldimg = pi3d.Texture('textures/gold.png', blend=True)
   ansimg = {}
   fnames = glob.glob('textures/???.jpg')
   for f in fnames:
@@ -109,7 +113,12 @@ class Main(object):
                               corners=((0, 0), (0, h*0.1),(w*0.05,h*0.05)))
   skip_button.set_material((0.7, 0.8, 1.0))
   skip_button.set_shader(matsh)
-  skip_button.set_alpha(0.1)
+  skip_button.set_alpha(0.2)
+  ##### medals
+  medals = pi3d.Sprite(camera=CAMERA2D, w=h/2.0, h=h/10.0, x=-w/2.0-h/4.0, y=-h*9.0/20.0,z=0.9)
+  medals.set_draw_details(flatsh, [bronzeimg], 0.0, 0.0, 5.0, 1.0)
+  medals.set_alpha(0.5)
+  kudos = 0
   ##### strings
   font = pi3d.Pngfont('fonts/Arial2.png', (200, 30, 10, 255))
   font.blend = True
@@ -133,6 +142,7 @@ class Main(object):
   tilt = 0.0
   drot = 0.0 # rate of rot, for touch screen 'gliding'
   dtilt = 0.0
+  moved_count = MOVED_FRAMES # for touch screen
   x, y, z = 0.0, 0.0, 0.0
   dx, dy, dz = 0.0, 0.0, 0.0
 
@@ -171,6 +181,7 @@ class Main(object):
   def score_mod(self, amount):
     ''' utility function to change score and flash up score and delta
     '''
+    w, h = self.DISPLAY.width, self.DISPLAY.height
     if amount < 0: # this is a reduction in health
       font = self.font # red
       self.health += amount
@@ -185,10 +196,27 @@ class Main(object):
       prefix = '+'
     self.s_text = pi3d.String(camera=self.CAMERA2D, font=font,
                   string='{}{:,}'.format(prefix, amount),
-                  is_3d=False, y=-self.DISPLAY.height / 2.0 + 50.0, size=0.6)
+                  is_3d=False, y=-h / 2.0 + 50.0, size=0.6)
     self.s_text.set_shader(self.flatsh)
     self.flash_count = 0
-    
+    ##### medal calc
+    kudos = int((max(self.score, self.scores[0]) + self.l_number * 5000 +
+                self.q_pointer * 5000) / 50000)
+    if self.kudos < kudos:
+      self.kudos = kudos
+      if kudos > 9: #gold
+        self.medals.set_textures([self.goldimg])
+        kudos -= 9
+      elif kudos > 4: #silver
+        self.medals.set_textures([self.silverimg])
+        kudos -= 4
+      else: #bronze
+        self.medals.set_textures([self.bronzeimg])
+        #kudos -= 1
+      if kudos > 5:
+        kudos = 5
+      self.medals.positionX(-w / 2.0 - h / 4.0 + kudos * h / 10.0)
+
 
 #####----------------------------#####-----------------------------#####
   def get_level(self):
@@ -250,7 +278,7 @@ class Main(object):
       saved_status = {'scores': self.scores, 'energy':self.energy,
                     'questions':self.questions, 'q_pointer':self.q_pointer,
                     'score': self.score, 'l_number': self.l_number,
-                    'health': self.health}
+                    'health': self.health, 'kudos':self.kudos}
       pickle.dump(saved_status, fp)
     self.frame_count = 0
     self.q_number = -1 # also use as flag indicate actually asking q
@@ -351,14 +379,16 @@ class Main(object):
         self.score = saved_status['score']
         self.l_number = saved_status['l_number']
         self.health = saved_status['health']
+        self.kudos = saved_status['kudos']
     else:
-      self.scores = []
+      self.scores = [0]
       self.energy = 1.0
       self.questions = questions #from imported questions
       self.q_pointer = 1 #number to slice with, not really pointer
       self.score = 0
       self.l_number = 0
       self.health = 1.0 #start off full health each time
+      self.kudos = 0
     #self.l_number = 39
     self.mode = SHOOT
     self.q_number = 0 #set when question asked
@@ -426,6 +456,7 @@ class Main(object):
         self.q_text.draw()
       self.target.draw()
       self.skip_button.draw()
+      self.medals.draw()
 
       if self.check():
         self.reset()
@@ -448,13 +479,18 @@ class Main(object):
       #self.skip_button.draw()
       scr = self.DISPLAY.android.screen # alias for brevity!
       if scr.touch and scr.touch.ud['down']: #still touching: damped
-        damping = 0.0
+        if self.moved_count <= 0:
+          damping = 0.0
+        else:
+          damping = 0.65
+          self.moved_count -= 1
       else:
         damping = 0.98 #low damping unless touch still down
         
       if scr.moved:
-        damping = 0.65 #if moving use medium damping for speed multiplier
-        sensitivity = 25.0
+        if self.moved_count < MOVED_FRAMES:
+          self.moved_count += 2 #if moving use medium damping for speed multiplier
+        sensitivity = 40.0
         self.drot -= scr.touch.dsx * sensitivity
         self.dtilt += scr.touch.dsy * sensitivity
         scr.moved = False
@@ -464,7 +500,8 @@ class Main(object):
         scr.double_tapped = False
         if scr.touch.sx > 0.90 and scr.touch.sy > 0.8:
           jump = True
-          if scr.previous_touch.ud['down'] and scr.previous_touch.sx > 0.9 and scr.previous_touch.sy < 0.2:
+          if (scr.previous_touch and scr.previous_touch.ud['down'] and
+              scr.previous_touch.sx > 0.9 and scr.previous_touch.sy < 0.2):
             cheat = True
       self.rot += self.drot
       self.tilt += self.dtilt
@@ -514,7 +551,7 @@ class Main(object):
               self.CAMERA.mtrx[0:3, 3], #[self.dx / self.go_speed, self.dy / self.go_speed, self.dz / self.go_speed],
               self.level.missile_speed, self.asteroids, g_asteroid=self.level.g_asteroid,
               g_missile=self.level.g_missile)
-      self.energy -= 0.05
+      self.energy -= 0.05 if self.q_number == -1 else 0.25
       self.energy_meter.change_reading(self.energy)
       self.missiles[self.missile][self.missile_pointer].flag = True
       self.missile_pointer = (self.missile_pointer + 1) % self.num_missiles
@@ -543,7 +580,7 @@ class Main(object):
             else: # questioning
               q = self.questions[self.q_number]
               if self.asteroids[i].correct_answer:
-                self.energy += 0.3
+                self.energy += 0.5
                 if self.energy > 1.0:
                   self.energy = 1.0
                 self.energy_meter.change_reading(self.energy)
