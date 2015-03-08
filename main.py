@@ -204,18 +204,24 @@ class Main(object):
                 self.q_pointer * 5000) / 50000)
     if self.kudos < kudos:
       self.kudos = kudos
-      if kudos > 9: #gold
-        self.medals.set_textures([self.goldimg])
-        kudos -= 9
-      elif kudos > 4: #silver
-        self.medals.set_textures([self.silverimg])
-        kudos -= 4
-      else: #bronze
-        self.medals.set_textures([self.bronzeimg])
-        #kudos -= 1
-      if kudos > 5:
-        kudos = 5
-      self.medals.positionX(-w / 2.0 - h / 4.0 + kudos * h / 10.0)
+      self.refresh_medals(kudos)
+
+
+#####----------------------------#####-----------------------------#####
+  def refresh_medals(self, kudos):
+    if kudos > 9: #gold
+      self.medals.set_textures([self.goldimg])
+      kudos -= 9
+    elif kudos > 4: #silver
+      self.medals.set_textures([self.silverimg])
+      kudos -= 4
+    else: #bronze
+      self.medals.set_textures([self.bronzeimg])
+      #kudos -= 1
+    if kudos > 5:
+      kudos = 5
+    w, h = self.DISPLAY.width, self.DISPLAY.height
+    self.medals.positionX(-w / 2.0 - h / 4.0 + kudos * h / 10.0)
 
 
 #####----------------------------#####-----------------------------#####
@@ -397,6 +403,7 @@ class Main(object):
     self.energy_meter.change_reading(1.0)
     self.s_text = self.high_score_text()
     self.s_text.set_shader(self.flatsh)
+    self.refresh_medals(self.kudos)
     self.reset()
 
 
