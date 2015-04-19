@@ -29,16 +29,16 @@ class Question(object):
 
 questions = [Question(7,8), Question(3,4), Question(4,6,'+'), Question(3,6),
              Question(4,7), Question(12,2), Question(5,5,'+'), Question(4,9),
-             Question(2,2), Question(3,7,'+'), Question(6,6), Question(6,9),
-             Question(3,7), Question(2,5,'+'), Question(4,8), Question(6,12),
-             Question(2,3), Question(8,8), Question(3,5,'+'), Question(8,12),
+             Question(2,2), Question(3,7,'+'), Question(6,6), Question(2,7),
+             Question(3,7), Question(2,5,'+'), Question(4,8), Question(5,7),
+             Question(7,9), Question(2,3), Question(8,8), Question(3,5,'+'),
              Question(3,6,'+'),Question(11,11), Question(3,3), Question(4,6),
              Question(6,7), Question(3,12), Question(7,7), Question(3,8),
              Question(7,12), Question(4,4), Question(9,9), Question(6,8),
-             Question(2,8,'+'),Question(7,9), Question(2,9), Question(4,12),
-             Question(2,4),Question(2,6), Question(3,9), Question(8,9),
-             Question(11,12), Question(2,4,'+'), Question(2,8), Question(5,7),
-             Question(9,12), Question(2,7), Question(12,12), Question(5,9)]
+             Question(11,12), Question(2,4,'+'), Question(2,8), Question(6,12),
+             Question(9,12), Question(6,9), Question(12,12), Question(5,9),
+             Question(2,8,'+'), Question(2,9), Question(4,12), Question(8,12),
+             Question(2,4),Question(2,6), Question(3,9), Question(8,9)]
 '''
 ##### this bit to generate the images as a one-off #####################
 from PIL import Image, ImageDraw, ImageFont

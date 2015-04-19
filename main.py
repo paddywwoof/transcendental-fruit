@@ -12,6 +12,7 @@ from questions import Question, questions
 from meter import Meter
 from level import Level, levels, level_names
 from dust import Dust
+from medals import Medals
 
 import os, pickle, glob, math
 
@@ -21,16 +22,17 @@ N_FRAMES = 2000 #120s at 30fps
 FLASH_FRAMES = 120
 RECHARGE_LEVEL = 0.1
 SHOOT_LEVEL = 0.9
-MOVED_FRAMES = 5 
+MOVED_FRAMES = 5
+FREE_VERSION = False
 
 # adjust following to make game nicely balanced
 MAX_DIST = 600.0
 MIN_DIST = 4.0
-MAX_DUST_DAMAGE = 0.1
-DUST_DAMAGE = -0.005
-ESCAPER = -0.025
+MAX_DUST_DAMAGE = 0.15
+DUST_DAMAGE = -0.01
+ESCAPER = -0.025 # per un-destroyed bad asteroid
 BUMP = -0.30
-TOP_UP = 0.04 # per good asteroid
+TOP_UP = 0.05 # per good asteroid
 
 ########################################################################
 class Main(object):
@@ -44,6 +46,7 @@ class Main(object):
   shinesh = pi3d.Shader('uv_reflect')
   flatsh = pi3d.Shader('uv_flat')
   matsh = pi3d.Shader('mat_flat')
+  mflatsh = pi3d.Shader('mat_reflect')
   ##### textures
   bumpimg = pi3d.Texture('textures/moon_nm.jpg')
   reflimg = pi3d.Texture('textures/stars.jpg')
@@ -80,7 +83,7 @@ class Main(object):
   clouds.positionX(2400.0)
   ##### moon
   moon = pi3d.Sphere(radius=500.0, slices=24, sides=24)
-  moon.set_draw_details(shader, [moonimg])
+  moon.set_draw_details(shinesh, [moonimg, bumpimg, reflimg], 2048.0, 0.05)
   moon.set_fog((0.0, 0.0, 0.0, 1.0), 15000)
   moon.positionX(-2000.0)
   ##### target
@@ -110,20 +113,24 @@ class Main(object):
   energy_meter = Meter(matsh, CAMERA2D, w/2.3, w*0.05, DISPLAY.height, value=0.0)
   ##### skip button
   skip_button = pi3d.Triangle(camera=CAMERA2D, x=w*0.45, y=h*0.4, z=1.0,
-                              corners=((0, 0), (0, h*0.1),(w*0.05,h*0.05)))
+                              corners=((0, 0),(0, h*0.1),(w*0.05,h*0.05)))
   skip_button.set_material((0.7, 0.8, 1.0))
   skip_button.set_shader(matsh)
   skip_button.set_alpha(0.2)
-  ##### medals
-  medals = pi3d.Sprite(camera=CAMERA2D, w=h/2.0, h=h/10.0, x=-w/2.0-h/4.0, y=-h*9.0/20.0,z=0.9)
-  medals.set_draw_details(flatsh, [bronzeimg], 0.0, 0.0, 5.0, 1.0)
-  medals.set_alpha(0.5)
-  kudos = 0
-  ##### strings
+  ##### pause button
+  pause_button = pi3d.Triangle(camera=CAMERA2D, x=-w*0.45, y=h*0.4, z=1.0,
+                              corners=((0, 0),(-w*0.05,h*0.05),(0, h*0.1)))
+  pause_button.set_material((0.8, 1.0, 0.7))
+  pause_button.set_shader(matsh)
+  pause_button.set_alpha(0.2)
+  ##### fonts
   font = pi3d.Pngfont('fonts/Arial2.png', (200, 30, 10, 255))
   font.blend = True
   font2 = pi3d.Pngfont('fonts/Arial2.png', (10, 200, 100, 255))
   font2.blend = True
+  ##### medals
+  view_medals = False
+  ##### strings
   default_string = pi3d.String(camera=CAMERA2D, font=font, string='RECHARGE',
                           is_3d=False, y=DISPLAY.height / 2.0 - 50.0, size=0.4)
   default_string.set_shader(flatsh)
@@ -149,6 +156,7 @@ class Main(object):
   go_speed = 0.2
 
   mode = SHOOT # 0 is shooting mode, 1 is recharge mode
+  last_ten = []
 
 
 #####----------------------------#####-----------------------------#####
@@ -166,7 +174,6 @@ class Main(object):
     self.CAMERA.position((self.x, self.y, self.z))
     self.tilt, self.rot = self.CAMERA.point_at([self.earth.x(), self.earth.y(), self.earth.z()])
 
-    
 
 #####----------------------------#####-----------------------------#####
   def high_score_text(self):
@@ -199,30 +206,17 @@ class Main(object):
                   is_3d=False, y=-h / 2.0 + 50.0, size=0.6)
     self.s_text.set_shader(self.flatsh)
     self.flash_count = 0
-    ##### medal calc
-    kudos = int((max(self.score, self.scores[0]) + self.l_number * 5000 +
-                self.q_pointer * 5000) / 50000)
-    if self.kudos < kudos:
-      self.kudos = kudos
-      self.refresh_medals(kudos)
-
 
 #####----------------------------#####-----------------------------#####
-  def refresh_medals(self, kudos):
-    if kudos > 9: #gold
-      self.medals.set_textures([self.goldimg])
-      kudos -= 9
-    elif kudos > 4: #silver
-      self.medals.set_textures([self.silverimg])
-      kudos -= 4
-    else: #bronze
-      self.medals.set_textures([self.bronzeimg])
-      #kudos -= 1
-    if kudos > 5:
-      kudos = 5
-    w, h = self.DISPLAY.width, self.DISPLAY.height
-    self.medals.positionX(-w / 2.0 - h / 4.0 + kudos * h / 10.0)
-
+  def toggle_pause(self):
+    if self.view_medals: #i.e. already on moon, return to saved location
+      self.view_medals = False
+      self.x, self.y, self.z, self.rot, self.tilt = self.saved_location
+      self.moon.rotateToX(0.0)
+    else:
+      self.view_medals = True
+      self.saved_location = self.x, self.y, self.z, self.rot, self.tilt
+      self.moon.rotateToX(14.5)
 
 #####----------------------------#####-----------------------------#####
   def get_level(self):
@@ -241,8 +235,11 @@ class Main(object):
       self.mode = RECHARGE
       if (self.l_number % 10) != 1:
         self.q_text = self.default_string
+      self.q_frames = 0
     elif self.mode == RECHARGE and self.energy > SHOOT_LEVEL:
       self.mode = SHOOT
+      if self.medals.q_check(self.questions, self.q_frames):
+        self.toggle_pause()
     self.frame_count += 1
     if self.frame_count > N_FRAMES: # out of time
       return True
@@ -255,17 +252,24 @@ class Main(object):
           if dist  > MAX_DIST or self.frame_count == N_FRAMES: # too far or out of time, kill it off
             if a.good: # a good asteroid has got through, hurrah
               self.health += TOP_UP
+            else:
+              self.score_mod(ESCAPER) # penalty for escaping asteroid -1.5%
+              self.last_ten[-1][4] += 1
             a.hit = True
             a.explode_seq = 101
-            self.score_mod(ESCAPER) # penalty for escaping asteroid -1.5%
           elif dist < MIN_DIST:
             self.score_mod(BUMP) # penalty for bumping into asteroid -30%
+            self.last_ten[-1][4] += 1
             a.hit = True
             a.explode_seq = 101
           elif not a.good:
             all_hit = False
         elif a.correct_answer: # asteroid hit and it was correct answer
           correct_answer = True
+          if self.q_frames == 0: # first question, but could have been a delay
+            self.q_frames = 100 # set to standard delay
+          else:
+            self.q_frames += self.frame_count
       if all_hit:
         return True
       if correct_answer:
@@ -280,16 +284,23 @@ class Main(object):
 
     NB this sets various variables so needs to be run before main loop and check()
     '''
-    with open('game.ini', 'wb') as fp: #save status
-      saved_status = {'scores': self.scores, 'energy':self.energy,
-                    'questions':self.questions, 'q_pointer':self.q_pointer,
-                    'score': self.score, 'l_number': self.l_number,
-                    'health': self.health, 'kudos':self.kudos}
-      pickle.dump(saved_status, fp)
+    if not FREE_VERSION: ##### in free version doesn't save
+      with open('game.ini', 'wb') as fp: #save status
+        medal_status = [self.medals.m_list[i].achieved for i in range(0, 7)]
+        saved_status = {'scores': self.scores, 'energy':self.energy,
+                      'questions':self.questions, 'q_pointer':self.q_pointer,
+                      'score': self.score, 'l_number': self.l_number,
+                      'health': self.health, 'medal_status':medal_status}
+        pickle.dump(saved_status, fp)
     self.frame_count = 0
     self.q_number = -1 # also use as flag indicate actually asking q
     self.level = self.get_level()
+    ############################################
     if self.mode == SHOOT: # - launch new set of target asteroids
+      self.last_ten.append([0, 0, 0, self.level.num, 0]) # dust, missiles, hits, asteroids, escapees
+      self.last_ten = self.last_ten[-10:]
+      if self.medals.s_check(self.last_ten, self.l_number):
+        self.toggle_pause()
       (self.x, self.y, self.z) = (self.level.start_location)
       self.asteroids = []
       for i in range(self.level.num):
@@ -317,16 +328,18 @@ class Main(object):
       self.num_missiles = self.level.num_missiles
       self.missile = self.level.missile
       self.l_number += 1
+    ################### missile style change, health review ############
       if (self.l_number % 10) == 1:
-        #self.health += TOP_UP # major recovery each progression to new missile
         self.q_text = pi3d.String(camera=self.CAMERA2D, font=self.font,
                           string='level ' + level_names[int((self.l_number - 1) / 10) % len(level_names)],
                           is_3d=False, y=self.DISPLAY.height / 2.0 - 50.0, size=0.4)
         self.q_text.set_shader(self.flatsh)
+        ####### also review medals
       else:
         self.health += 0.025 # heath boost each round 2.5%
       if self.health > 1.0:
         self.health = 1.0
+    ############################################
     else: # ask recharge questions
       for a in self.asteroid_stock: # kill off any stray asteroids in case they get hit by a still travelling missile
         a.hit = True
@@ -385,8 +398,8 @@ class Main(object):
         self.score = saved_status['score']
         self.l_number = saved_status['l_number']
         self.health = saved_status['health']
-        self.kudos = saved_status['kudos']
-    else:
+        medal_status = saved_status['medal_status']
+    else: # first load
       self.scores = [0]
       self.energy = 1.0
       self.questions = questions #from imported questions
@@ -394,17 +407,21 @@ class Main(object):
       self.score = 0
       self.l_number = 0
       self.health = 1.0 #start off full health each time
-      self.kudos = 0
-    #self.l_number = 39
+      medal_status = [False for i in range(0, 7)]
+      
+    self.medals = Medals(self.mflatsh, self.flatsh, self.reflimg,
+                        self.font, -2000.0, 505.0, 0.0, FREE_VERSION)
+    for i in range(0, 7):
+      if medal_status[i]:
+        self.medals.m_list[i].achieve()
     self.mode = SHOOT
     self.q_number = 0 #set when question asked
-    #self.health = 1.0 #start off full health each time
-    self.health_meter.change_reading(1.0)
-    self.energy_meter.change_reading(1.0)
+    self.health_meter.change_reading(self.health)
+    self.energy_meter.change_reading(self.energy)
     self.s_text = self.high_score_text()
     self.s_text.set_shader(self.flatsh)
-    self.refresh_medals(self.kudos)
     self.reset()
+    self.toggle_pause()
 
 
 #----############################-----#############################----#
@@ -443,6 +460,11 @@ class Main(object):
       self.earth.set_alpha(1.0)
       self.clouds.set_alpha(1.0)
       self.reset()
+    elif self.view_medals: # on moon to review medals
+      end_text = ""
+      self.x, self.y, self.z = -2000.0, 505.0, 0.0
+      self.medals.draw()
+      self.pause_button.draw()
     else: # normal drawing etc
       end_text = ""
       for a in self.asteroids:
@@ -457,13 +479,14 @@ class Main(object):
              self.dust_damage_tally < MAX_DUST_DAMAGE):
                # to prevent destruction if going same direction as dust
           self.score_mod(DUST_DAMAGE) # hit by dust -0.5%
-          self.dust_damage_tally += DUST_DAMAGE 
+          self.dust_damage_tally += DUST_DAMAGE
+          self.last_ten[-1][0] += 1
       self.energy_meter.draw()
       if self.mode == RECHARGE or (self.l_number % 10) == 1:
         self.q_text.draw()
       self.target.draw()
       self.skip_button.draw()
-      self.medals.draw()
+      self.pause_button.draw()
 
       if self.check():
         self.reset()
@@ -482,6 +505,7 @@ class Main(object):
     fire = False
     jump = False
     cheat = False
+    pause = False
     if PLATFORM == PLATFORM_ANDROID: # android <<<<<<<<<<<<<<<<<<<<<<<<<
       #self.skip_button.draw()
       scr = self.DISPLAY.android.screen # alias for brevity!
@@ -502,7 +526,6 @@ class Main(object):
         self.dtilt += scr.touch.dsy * sensitivity
         scr.moved = False
       elif scr.tapped or scr.double_tapped:
-        fire = True
         scr.tapped = False
         scr.double_tapped = False
         if scr.touch.sx > 0.90 and scr.touch.sy > 0.8:
@@ -510,6 +533,10 @@ class Main(object):
           if (scr.previous_touch and scr.previous_touch.ud['down'] and
               scr.previous_touch.sx > 0.9 and scr.previous_touch.sy < 0.2):
             cheat = True
+        if scr.touch.sx < 0.10 and scr.touch.sy > 0.8:
+          pause = True
+        else:
+          fire = True
       self.rot += self.drot
       self.tilt += self.dtilt
       self.drot *= damping
@@ -532,6 +559,8 @@ class Main(object):
         elif k==ord('4'): #cheat
           jump = True
           cheat = True
+        elif k==ord('z'): #z key
+          pause = True
         elif k==27:  #Escape key
           return False
       b = self.mouse.button_status()
@@ -543,6 +572,8 @@ class Main(object):
     elif self.tilt < -90:
       self.tilt = -90
     ##### act on results of input ######################################
+    if pause:
+      self.toggle_pause()
     if jump:
       #self.l_number = (self.l_number + 5) % len(questions)
       #self.reset()
@@ -554,11 +585,15 @@ class Main(object):
     if fire:
       if self.q_number > -1: # shooting at questions
         self.level = self.levels[0]
+      else:
+        self.last_ten[-1][1] += 1
       self.missiles[self.missile][self.missile_pointer].launch([self.x, self.y, self.z],
               self.CAMERA.mtrx[0:3, 3], #[self.dx / self.go_speed, self.dy / self.go_speed, self.dz / self.go_speed],
               self.level.missile_speed, self.asteroids, g_asteroid=self.level.g_asteroid,
               g_missile=self.level.g_missile)
       self.energy -= 0.05 if self.q_number == -1 else 0.25
+      if self.energy < -0.5: #prevent excessive energy debt
+        self.energy = -0.5
       self.energy_meter.change_reading(self.energy)
       self.missiles[self.missile][self.missile_pointer].flag = True
       self.missile_pointer = (self.missile_pointer + 1) % self.num_missiles
@@ -584,6 +619,7 @@ class Main(object):
               if a.good:
                 score = -0.25 # penalty for hitting a good asteroid 25%
               self.score_mod(score)
+              self.last_ten[-1][2] += 1
             else: # questioning
               q = self.questions[self.q_number]
               if self.asteroids[i].correct_answer:
