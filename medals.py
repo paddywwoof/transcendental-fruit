@@ -9,13 +9,13 @@ from pi3d.constants import PLATFORM, PLATFORM_ANDROID
 R = 4.5
 if PLATFORM != PLATFORM_ANDROID:
   ALT_TEXT = ["Z", "X", "SPACE", ""]
-  TARGETS = [525, 425, 0.5, 0.95, 0.05]
+  TARGETS = [525, 450, 0.5, 0.95, 0.05]
 else:
   ALT_TEXT = ["TAP top-left", "TAP top-right", "TAP",
               """Keeping touching stops your craft spinning
 freely, you can then shoot accurately by tapping
 with a different finger"""]
-  TARGETS = [575, 475, 0.75, 0.90, 0.1]
+  TARGETS = [600, 525, 0.8, 0.90, 0.1]
 M_TEXT = [
 """7 x Champion
 

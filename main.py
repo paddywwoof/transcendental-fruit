@@ -82,8 +82,8 @@ class Main(object):
   clouds.set_fog((0.0, 0.0, 0.0, 1.0), 15000)
   clouds.positionX(2400.0)
   ##### moon
-  moon = pi3d.Sphere(radius=500.0, slices=24, sides=24)
-  moon.set_draw_details(shinesh, [moonimg, bumpimg, reflimg], 2048.0, 0.05)
+  moon = pi3d.Sphere(radius=500.0, slices=32, sides=32)
+  moon.set_draw_details(shinesh, [moonimg, bumpimg, reflimg], 1.0, 0.05)
   moon.set_fog((0.0, 0.0, 0.0, 1.0), 15000)
   moon.positionX(-2000.0)
   ##### target
@@ -164,10 +164,10 @@ class Main(object):
     # write score to history if in top 5
     self.l_number = 0 #start as 0 each time it runs
     self.health = 1.0 #start off full health each time
+    self.last_ten = []
     self.scores.append(self.score)
     self.scores.sort(reverse=True)
     self.scores = self.scores[0:5] # cut off the first 5
-    #self.score = 0 set this to zero after end of world sequence!
     self.q_text = self.high_score_text()
     self.end_count = 500
     self.x, self.y, self.z = -2300, 50, 590.0
