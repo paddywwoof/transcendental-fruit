@@ -9,25 +9,27 @@ from pi3d.constants import PLATFORM, PLATFORM_ANDROID
 R = 4.5
 if PLATFORM != PLATFORM_ANDROID:
   ALT_TEXT = ["Z", "X", "SPACE", ""]
-  TARGETS = [525, 450, 0.5, 0.95, 0.05]
+  # targets quick ans, tacheon, dust, missile efficiency, asteroid escapes
+  TARGETS = [525, 425, 0.50, 0.95, 0.05]
 else:
   ALT_TEXT = ["TAP top-left", "TAP top-right", "TAP",
               """Keeping touching stops your craft spinning
 freely, you can then shoot accurately by tapping
 with a different finger"""]
-  TARGETS = [600, 525, 0.8, 0.90, 0.1]
+  TARGETS = [550, 470, 0.80, 0.90, 0.10]
 M_TEXT = [
 """7 x Champion
 
 Master the most difficult part
-of the multiplication tables""",
+of the multiplication tables
+14, 21, 28, 35, 42, 49, 56, 63, 84""",
 
 """Heavy Weight Champion
 
 Cope with the top end of the
 tables: 108, 121, 132 and 144""",
 
-"""Feather Duster
+"""Dust Free
 
 Get through 10 rounds with
 almost no dust damage""",
@@ -156,11 +158,13 @@ class Medals(object):
       self.m_list[2].achieve()
       new_medal = True
     ##### missile hits
-    if num[2] / num[1] > (TARGETS[3] - l_number * 0.0015) and not self.m_list[3].achieved:
+    if (num[1] > 0 and num[2] / num[1] > (TARGETS[3] - l_number * 0.0015)
+                   and not self.m_list[3].achieved):
       self.m_list[3].achieve()
       new_medal = True
     ##### meteor escapes
-    if num[4] / num[3] < (TARGETS[4] + l_number * 0.002) and not self.m_list[4].achieved:
+    if (num[3] > 0 and num[4] / num[3] < (TARGETS[4] + l_number * 0.002)
+                   and not self.m_list[4].achieved):
       self.m_list[4].achieve()
       new_medal = True
     return new_medal

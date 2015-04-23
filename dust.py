@@ -22,7 +22,7 @@ class Dust(pi3d.Points):
       verts.append(loc)
       self.xyz.add((int(loc[0]/5), int(loc[1]/5), int(loc[2]/5)))
       
-    super(Dust, self).__init__(vertices=verts, material=(0.6, 0.6, 1.0), point_size=50)
+    super(Dust, self).__init__(vertices=verts, material=(0.6, 0.6, 1.0), point_size=400)
     self.set_shader(shader)
     self.set_fog((1.0, 0.0, 0.0, 0.0), 500.0)
 

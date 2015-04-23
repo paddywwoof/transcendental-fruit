@@ -37,7 +37,7 @@ TOP_UP = 0.05 # per good asteroid
 ########################################################################
 class Main(object):
   # Setup display and initialise pi3d
-  DISPLAY = pi3d.Display.create(x=100, y=100, far=15000, frames_per_second=30.0)
+  DISPLAY = pi3d.Display.create(w=1280, h=640, far=15000, frames_per_second=30.0)
   ##### cameras
   CAMERA = pi3d.Camera()
   CAMERA2D = pi3d.Camera(is_3d=False)
@@ -47,6 +47,7 @@ class Main(object):
   flatsh = pi3d.Shader('uv_flat')
   matsh = pi3d.Shader('mat_flat')
   mflatsh = pi3d.Shader('mat_reflect')
+  dustsh = pi3d.Shader('shaders/dust_point')
   ##### textures
   bumpimg = pi3d.Texture('textures/moon_nm.jpg')
   reflimg = pi3d.Texture('textures/stars.jpg')
@@ -253,15 +254,17 @@ class Main(object):
             if a.good: # a good asteroid has got through, hurrah
               self.health += TOP_UP
             else:
+              if len(self.last_ten) > 0:
+                self.last_ten[-1][4] += 1
               self.score_mod(ESCAPER) # penalty for escaping asteroid -1.5%
-              self.last_ten[-1][4] += 1
             a.hit = True
             a.explode_seq = 101
           elif dist < MIN_DIST:
-            self.score_mod(BUMP) # penalty for bumping into asteroid -30%
-            self.last_ten[-1][4] += 1
+            if len(self.last_ten) > 0:
+              self.last_ten[-1][4] += 1
             a.hit = True
             a.explode_seq = 101
+            self.score_mod(BUMP) # penalty for bumping into asteroid -30%
           elif not a.good:
             all_hit = False
         elif a.correct_answer: # asteroid hit and it was correct answer
@@ -316,7 +319,7 @@ class Main(object):
                 threshold=self.level.threshold, good=good)
         self.asteroids.append(a)
       if self.level.dust:
-        self.dust = Dust(self.matsh, self.level.dust)
+        self.dust = Dust(self.dustsh, self.level.dust)
         self.dust.launch(self.level.start_loc, self.level.start_range, (self.x, self.y, self.z),
                   self.level.speed, self.level.speed_range)
         self.dust_damage_tally = 0
@@ -478,9 +481,10 @@ class Main(object):
              self.dust.test_hit((self.x, self.y, self.z)) and
              self.dust_damage_tally < MAX_DUST_DAMAGE):
                # to prevent destruction if going same direction as dust
+          if len(self.last_ten) > 0:
+           self.last_ten[-1][0] += 1
           self.score_mod(DUST_DAMAGE) # hit by dust -0.5%
           self.dust_damage_tally += DUST_DAMAGE
-          self.last_ten[-1][0] += 1
       self.energy_meter.draw()
       if self.mode == RECHARGE or (self.l_number % 10) == 1:
         self.q_text.draw()
@@ -578,7 +582,7 @@ class Main(object):
       #self.l_number = (self.l_number + 5) % len(questions)
       #self.reset()
       self.frame_count = N_FRAMES - 1 # go to final tidy up frame
-      if cheat:
+      if cheat and FREE_VERSION: # i.e. can cheat if free version!
         self.score = 0
         self.health = 1.0
         self.energy = 1.0
@@ -618,8 +622,9 @@ class Main(object):
               score = int(2000 * (1.0 - 0.25 / (0.25 + dist / a.threshold) / rng))
               if a.good:
                 score = -0.25 # penalty for hitting a good asteroid 25%
+              if len(self.last_ten) > 0:
+                self.last_ten[-1][2] += 1
               self.score_mod(score)
-              self.last_ten[-1][2] += 1
             else: # questioning
               q = self.questions[self.q_number]
               if self.asteroids[i].correct_answer:
