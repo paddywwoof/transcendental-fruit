@@ -23,7 +23,7 @@ FLASH_FRAMES = 120
 RECHARGE_LEVEL = 0.1
 SHOOT_LEVEL = 0.9
 MOVED_FRAMES = 5
-FREE_VERSION = False
+FREE_VERSION = True
 
 # adjust following to make game nicely balanced
 MAX_DIST = 600.0

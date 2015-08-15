@@ -13,3 +13,6 @@ game.*
 
 #this and other txt files
 *.txt
+
+#apk packaged files (only put in here so available for people on github)
+*.apk
